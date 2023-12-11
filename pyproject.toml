@@ -17,6 +17,14 @@ classifiers = [
     "Typing :: Typed",
     "Topic :: Games/Entertainment"
 ]
+packages = [{include = "minecraft_mod_downloader"}]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+install-minecraft-mods = "minecraft_mod_downloader.console:run"
 
 [tool.poetry.dependencies]
 python = "^3.12"
