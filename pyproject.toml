@@ -2,7 +2,7 @@
 name = "Minecraft-Mod-Downloader"
 version = "0.0.2"
 license = "Apache-2.0"
-description = "A Python helper script to load a set of mods from a JSON file"
+description = "A Python helper script to load a set of mods from a local mods-list"
 authors = ["CarrotManMatt <matt@carrotmanmatt.com>"]
 repository = "https://github.com/CarrotManMatt/Minecraft-Mod-Downloader.git"
 keywords = ["minecraft", "mods", "fabric", "forge", "quilt"]
