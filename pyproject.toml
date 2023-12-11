@@ -13,7 +13,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Development Status :: 4 - Beta",
     "License :: OSI Approved :: Apache Software License",
-    "Intended Audience :: Gaming",
+    "Intended Audience :: End Users/Desktop",
     "Typing :: Typed",
     "Topic :: Games/Entertainment"
 ]
