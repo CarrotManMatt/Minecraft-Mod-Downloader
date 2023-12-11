@@ -1,0 +1,126 @@
+### Python
+
+# Byte-Compiled / Optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C Extensions
+*.so
+
+# Distribution / Packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer Logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit Test / Coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+coverage-html
+*.cover
+*.py,cover
+.hypothesis/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# PyBuilder
+.pybuilder/
+target/
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pdm
+.pdm.toml
+
+# PEP 582;
+__pypackages__/
+
+# Environments
+.env
+._env
+.env.test
+.env.original
+.venv
+.venv.touch
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Logs
+logs/
+*.log
+
+# Diagnostic Reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime Data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Caches
+.mypy_cache
+.mypy_cache/
+.pytest_cache
+.pytest_cache/
+.ruff_cache
+.ruff_cache/
+.cache
+.cache/
+.dmypy.json
+dmypy.json
+
+# Cython Debug Symbols
+cython_debug/
+
+# VSCode Settings
+.vscode/
+
+# JetBrains IDE Settings
+.idea/
+
+# Local Files / Databases
+local/
+*.sqlite3
+*.db
+Mods.json
+mods-list.*
