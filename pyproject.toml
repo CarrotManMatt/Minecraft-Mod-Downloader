@@ -29,6 +29,8 @@ install-minecraft-mods = "minecraft_mod_downloader.console:run"
 [tool.poetry.dependencies]
 python = "^3.12"
 python-dotenv = "^1.0"
+validators = "^0.22"
+pathvalidate = "^3.2"
 requests = "^2.31"
 
 [tool.poetry.group.dev.dependencies]
@@ -99,6 +101,24 @@ select = [
     "FLY",
     "PERF",
     "RUF"
+]
+ignore = [
+    "N818",
+    "N806",
+    "D203",
+    "D212",
+    "ANN101",
+    "ANN102",
+    "ANN401",
+    "S101",
+    "S311",
+    "COM812",
+    "Q003",
+    "TD002",
+    "TD003",
+    "PLR0911",
+    "PLR0915",
+    "TRY400"
 ]
 line-length = 95
 fixable = ["I001", "TCH", "F401", "RUF100"]
