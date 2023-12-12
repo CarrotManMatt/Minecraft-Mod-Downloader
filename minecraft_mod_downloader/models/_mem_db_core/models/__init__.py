@@ -223,12 +223,12 @@ class DetailedMod(BaseMod):
                 name="unique_version_id_per_name"
             ),
             models.UniqueConstraint(
-                fields=("version_id", "_unique_identifier"),
-                name="unique_version_id_per_name"
+                fields=("version_id", "basemod_ptr"),
+                name="unique_version_id_per_unique_identifier"
             ),
             models.UniqueConstraint(
-                fields=("name", "_unique_identifier"),
-                name="unique_version_id_per_name"
+                fields=("name", "basemod_ptr"),
+                name="unique_name_per_unique_identifier"
             )
         ]
 
@@ -290,18 +290,10 @@ class APISourceMod(DetailedMod):
         constraints = [
             models.UniqueConstraint(
                 fields=("api_mod_id", "api_source"),
-                name="unique_version_id_per_name"
+                name="unique_api_mod_id_per_api_source"
             ),
             models.UniqueConstraint(
-                fields=("api_mod_id", "_unique_identifier"),
-                name="unique_version_id_per_name"
-            ),
-            models.UniqueConstraint(
-                fields=("api_mod_id", "name"),
-                name="unique_version_id_per_name"
-            ),
-            models.UniqueConstraint(
-                fields=("api_mod_id", "version_id"),
-                name="unique_version_id_per_name"
+                fields=("api_mod_id", "detailedmod_ptr"),
+                name="unique_api_mod_id_per_unique_identifier"
             )
         ]

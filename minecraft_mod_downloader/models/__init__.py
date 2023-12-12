@@ -9,9 +9,9 @@ __all__: Sequence[str] = (
     "MinecraftVersionValidator"
 )
 
-from minecraft_mod_downloader.config import settings
+from minecraft_mod_downloader import config
 
-if settings.is_django_setup:
+if config.IS_DJANGO_SETUP:
     # noinspection PyProtectedMember
     from minecraft_mod_downloader.models._mem_db_core.models import (
         BaseMod,
