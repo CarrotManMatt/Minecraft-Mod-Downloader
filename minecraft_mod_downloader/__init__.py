@@ -2,6 +2,6 @@
 
 from collections.abc import Sequence
 
-__all__: Sequence[str] = ("console",)
+__all__: Sequence[str] = ("run",)
 
-from minecraft_mod_downloader import console
+from minecraft_mod_downloader.console import run
