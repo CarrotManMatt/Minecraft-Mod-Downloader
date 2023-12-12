@@ -29,17 +29,23 @@ install-minecraft-mods = "minecraft_mod_downloader.console:run"
 [tool.poetry.dependencies]
 python = "^3.12"
 python-dotenv = "^1.0"
-validators = "^0.22"
 pathvalidate = "^3.2"
+django = "~5.0"
 requests = "^2.31"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "~1.7"
+django-stubs = {extras = ["compatible-mypy"], version = "~4.2"}
 types-requests = "^2.31"
 ruff = "^0.1"
 setuptools = "*"  # NOTE: Required by Pycharm
 
+[tool.django-stubs]
+django_settings_module = "minecraft_mod_downloader.models._settings"
+
 [tool.mypy]
+plugins = ["mypy_django_plugin.main"]
+exclude = "db/settings\\.py$"
 extra_checks = true
 warn_unused_configs = true
 disallow_untyped_calls = true

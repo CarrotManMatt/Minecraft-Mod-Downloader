@@ -1,13 +1,23 @@
 from collections.abc import Sequence
 
 __all__: Sequence[str] = (
-    "ModLoader",
+    "BaseMod",
     "SimpleMod",
-    "DetailedMod",
-    "CustomMod",
-    "APIMod",
-    "ModList"
+    "CustomSourceMod",
+    "APISourceMod",
+    "ModTag",
+    "MinecraftVersionValidator"
 )
 
-from minecraft_mod_downloader.models.mod import ModLoader, SimpleMod, DetailedMod, CustomMod, APIMod
-from minecraft_mod_downloader.models.mod_list import ModList
+from minecraft_mod_downloader.config import settings
+
+if settings.is_django_setup:
+    # noinspection PyProtectedMember
+    from minecraft_mod_downloader.models._mem_db_core.models import (
+        BaseMod,
+        SimpleMod,
+        CustomSourceMod,
+        APISourceMod,
+        ModTag,
+        MinecraftVersionValidator
+    )

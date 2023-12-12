@@ -4,21 +4,26 @@ Contains settings values and import & setup functions.
 Settings values are imported from the .env file or the current environment variables.
 These values are used to configure the functionality of the bot at run-time.
 """
-import logging
+
 from collections.abc import Sequence
 
 __all__: Sequence[str] = (
     "TRUE_VALUES",
     "FALSE_VALUES",
     "settings",
-    "setup_env_variables"
+    "setup_env_variables",
+    "setup_django",
+    "IS_ENV_VARIABLES_SETUP",
+    "IS_DJANGO_SETUP"
 )
 
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Any, ClassVar, Final, Self, final
 
+import django
 import dotenv
 
 from minecraft_mod_downloader.exceptions import ConfigSettingRequiredError, ImproperlyConfiguredError
@@ -191,11 +196,24 @@ class Settings:
 
             self._is_env_variables_setup = True
 
+    def _setup_django(self) -> None:
+        """
+        Load the correct settings module into the Django process.
+
+        Scripts cannot access model instances & database data until
+        Django's settings module has been loaded.
+        """
+        if not self._is_django_setup:
+            os.environ["DJANGO_SETTINGS_MODULE"] = "minecraft_mod_downloader.models._settings"
+            django.setup()
+
+            self._is_django_setup = True
+
 
 settings: Final[Settings] = Settings()
 
 
-def setup_env_variables(mods_list_file_path: str) -> None:
+def setup_env_variables(mods_list_file_path: Path, mods_list: str, mods_installation_directory_path: Path, curseforge_api_key: str) -> None:  # noqa: E501
     """
     Load environment values into the settings dictionary.
 
@@ -203,4 +221,39 @@ def setup_env_variables(mods_list_file_path: str) -> None:
     are only stored after the input values have been validated.
     """
     # noinspection PyProtectedMember
-    settings._setup_env_variables(mods_list_file_path)  # noqa: SLF001
+    settings._setup_env_variables(  # noqa: SLF001
+        mods_list_file_path,
+        mods_list,
+        mods_installation_directory_path,
+        curseforge_api_key
+    )
+
+
+def setup_django() -> None:
+    """
+    Load the correct settings module into the Django process.
+
+    Scripts cannot access model instances & database data until
+    Django's settings module has been loaded.
+    """
+    # noinspection PyProtectedMember
+    settings._setup_django()  # noqa: SLF001
+
+
+IS_ENV_VARIABLES_SETUP: bool
+IS_DJANGO_SETUP: bool
+
+
+def __getattr__(item: str) -> object:
+    if item == "IS_ENV_VARIABLES_SETUP":
+        # noinspection PyProtectedMember
+        return settings._is_env_variables_setup  # noqa: SLF001
+
+    if item == "IS_DJANGO_SETUP":
+        # noinspection PyProtectedMember
+        return settings._is_django_setup  # noqa: SLF001
+
+    MODULE_ATTRIBUTE_ERROR_MESSAGE: Final[str] = (
+        f"module {__name__!r} has no attribute {item!r}"
+    )
+    raise AttributeError(MODULE_ATTRIBUTE_ERROR_MESSAGE)
