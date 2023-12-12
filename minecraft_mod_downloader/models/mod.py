@@ -18,7 +18,7 @@ import re
 from collections.abc import Iterable
 from enum import Enum
 from pathlib import Path
-from typing import Final, Self
+from typing import Final
 
 import pathvalidate
 import validators
@@ -38,6 +38,7 @@ class ModLoader(Enum):
     QUILT = "Fabric"
 
 
+# TODO: Implement using Django (in-memory database)
 class BaseMod(abc.ABC):
     @staticmethod
     def identifier_is_valid(identifier: str) -> bool:
@@ -49,7 +50,7 @@ class BaseMod(abc.ABC):
     def sanitise_minecraft_version(minecraft_version: str) -> str:
         minecraft_version_is_sanitised: bool = bool(
             re.match(
-                r"\A1\.[1-9]\d{0,2}\.(?:0|[1-9]\d{0,1})\Z",
+                r"\A1\.[1-9]\d{0,2}\.(?:0|[1-9]\d?)\Z",
                 minecraft_version
             )
         )
@@ -58,7 +59,7 @@ class BaseMod(abc.ABC):
 
         minecraft_version_needs_sanitising: bool = bool(
             re.match(
-                r"\A0*1\.0*[1-9]\d{0,2}(?:\.0*(?:0|[1-9]\d{0,1}))?\Z",
+                r"\A0*1\.0*[1-9]\d{0,2}(?:\.0*(?:0|[1-9]\d?))?\Z",
                 minecraft_version
             )
         )
@@ -100,6 +101,9 @@ class BaseMod(abc.ABC):
 
     def __str__(self) -> str:
         return self.get_unique_identifier()
+
+    def __repr__(self) -> str:
+        raise NotImplementedError  # TODO
 
     @property
     def minecraft_version(self) -> str:
