@@ -30,6 +30,7 @@ install-minecraft-mods = "minecraft_mod_downloader.console:run"
 python = "^3.12"
 python-dotenv = "^1.0"
 pathvalidate = "^3.2"
+identify = "^2.5"
 django = "~5.0"
 requests = "^2.31"
 

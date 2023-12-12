@@ -20,8 +20,10 @@ __all__: Sequence[str] = (
 import logging
 import os
 import re
+import platform
 from pathlib import Path
 from typing import Any, ClassVar, Final, Self, final
+from identify import identify
 
 import django
 import dotenv
@@ -33,6 +35,41 @@ FALSE_VALUES: Final[frozenset[str]] = frozenset({"false", "0", "f", "n", "no", "
 
 
 # def get_mods_list(raw_mods_list: str) -> Iterable[str | ]
+
+
+def get_default_minecraft_installation_directory_path() -> Path:
+    system: str = platform.system()
+    if system == "Windows":
+        windows_minecraft_installation_directory_path: Path = (
+            Path(os.getenv('APPDATA')) / ".minecraft"
+        )
+        if windows_minecraft_installation_directory_path.is_dir():
+            return windows_minecraft_installation_directory_path
+
+    if system == "Linux":
+        linux_minecraft_installation_directory_path: Path = Path.home() / ".minecraft"
+        if linux_minecraft_installation_directory_path.is_dir():
+            return linux_minecraft_installation_directory_path
+
+        linux_minecraft_installation_directory_path = (
+            Path.home() / ".var/app/com.mojang.Minecraft/.minecraft"
+        )
+        if linux_minecraft_installation_directory_path.is_dir():
+            return linux_minecraft_installation_directory_path
+
+    if system == "Darwin":
+        macos_minecraft_installation_directory_path: Path = (
+            Path.home() / "Library/Application Support/minecraft"
+        )
+        if macos_minecraft_installation_directory_path.is_dir():
+            return macos_minecraft_installation_directory_path
+
+    INDETERMINABLE_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE: Final[str] = (
+        "MINECRAFT_INSTALLATION_DIRECTORY_PATH could not be determined, "
+        "because either Minecraft is not installable on your Operating System, "
+        f"or no `.minecraft` directory exists."
+    )
+    raise OSError(INDETERMINABLE_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE)
 
 
 @final
@@ -72,7 +109,7 @@ class Settings:
         self._setup_env_variables(
             mods_list_file_path=None,
             mods_list=None,
-            mods_installation_directory_path=None,
+            minecraft_installation_directory_path=None,
             curseforge_api_key=None
         )
 
@@ -103,7 +140,7 @@ class Settings:
 
             raise KeyError(key_error_message) from None
 
-    def _setup_mods_list(self, mods_list_file_path: Path | None, mods_list: str | None) -> None:
+    def _setup_mods_list(self, mods_list_file_path: Path | None, mods_list: str | None) -> None:  # TODO: get list out of file
         raw_mods_list_file_path: str = os.getenv("MODS_LIST_FILE_PATH", "")
         if raw_mods_list_file_path:
             mods_list_file_path = Path(raw_mods_list_file_path)
@@ -126,7 +163,94 @@ class Settings:
                 raise ImproperlyConfiguredError(INVALID_MODS_LIST_FILE_PATH_MESSAGE)
         self._settings["MODS_LIST_FILE_PATH"] = mods_list_file_path
 
-    def _setup_env_variables(self, mods_list_file_path: Path | None, mods_list: str | None, mods_installation_directory_path: Path | None, curseforge_api_key: str | None) -> None:
+    def _setup_minecraft_installation_directory_path(self, minecraft_installation_directory_path: Path | None) -> None:
+        raw_minecraft_installation_directory_path: str = os.getenv(
+            "MINECRAFT_INSTALLATION_DIRECTORY_PATH",
+            ""
+        )
+
+        if minecraft_installation_directory_path is None:
+            minecraft_installation_directory_path = (
+                Path(
+                    raw_minecraft_installation_directory_path
+                )
+                if raw_minecraft_installation_directory_path
+                else self.get_default_minecraft_installation_directory_path()
+            )
+
+        path_is_valid_minecraft_installation_directory: bool = bool(
+            minecraft_installation_directory_path.is_dir()
+            and (minecraft_installation_directory_path / "assets").is_dir()
+            and (minecraft_installation_directory_path / "clientID.txt").is_file()
+            and (
+                tag in identify.tags_from_path(
+                    minecraft_installation_directory_path / "clientID.txt"
+                )
+                for tag
+                in ("file", "text", "plain-text")
+            )
+            and (minecraft_installation_directory_path / "launcher_accounts.json").is_file()
+            and (
+                tag in identify.tags_from_path(
+                    minecraft_installation_directory_path / "launcher_accounts.json"
+                )
+                for tag
+                in ("file", "text", "json")
+            )
+            and (minecraft_installation_directory_path / "options.txt").is_file()
+            and (
+                tag in identify.tags_from_path(
+                    minecraft_installation_directory_path / "launcher_accounts.json"
+                )
+                for tag
+                in ("file", "text", "plain-text")
+            )
+        )
+
+        if not path_is_valid_minecraft_installation_directory:
+            INVALID_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE: Final[str] = (
+                "MINECRAFT_INSTALLATION_DIRECTORY_PATH must be a valid path "
+                "to your Minecraft installation directory."
+            )
+            raise ImproperlyConfiguredError(
+                INVALID_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE
+            )
+
+        self._settings["MINECRAFT_INSTALLATION_DIRECTORY_PATH"] = (
+            minecraft_installation_directory_path
+        )
+
+    def _setup_curseforge_api_key(self, curseforge_api_key: str | None) -> None:
+        raw_curseforge_api_key: str = os.getenv(
+            "CURSEFORGE_API_KEY",
+            ""
+        )
+
+        if curseforge_api_key is None:
+            if not raw_curseforge_api_key:
+                logging.warning(
+                    "CURSEFORGE_API_KEY has not been provided. "
+                    "If any mods need to be downloaded from CurseForge, "
+                    "they will fail to be downloaded. "
+                    "Provide your CurseForge API Key, "
+                    "either via the `--curseforge-api-key` CLI argument, "
+                    "or the CURSEFORGE_API_KEY environment variable."
+                )
+                return
+
+            curseforge_api_key = raw_curseforge_api_key
+
+        if not re.match(r"\A[A-Za-z0-9$/.]{60}\Z", curseforge_api_key):
+            INVALID_CURSEFORGE_API_KEY_MESSAGE: Final[str] = (
+                "CURSEFORGE_API_KEY must be a valid CurseForge API Key "
+                "(see https://console.curseforge.com/?#/api-keys "
+                "for how to generate CurseForge API keys)."
+            )
+            raise ImproperlyConfiguredError(INVALID_CURSEFORGE_API_KEY_MESSAGE)
+
+        self._settings["CURSEFORGE_API_KEY"] = curseforge_api_key
+
+    def _setup_env_variables(self, mods_list_file_path: Path | None, mods_list: str | None, minecraft_installation_directory_path: Path | None, curseforge_api_key: str | None) -> None:
         """
         Load environment values into the settings dictionary.
 
@@ -136,63 +260,13 @@ class Settings:
         if not self._is_env_variables_setup:
             dotenv.load_dotenv()
 
-            self._setup_mods_list(mods_list_file_path, mods_list)
+            self._setup_mods_list(mods_list_file_path=mods_list_file_path, mods_list=mods_list)
 
-            raw_mods_installation_directory_path: str = os.getenv(
-                "MODS_INSTALLATION_DIRECTORY_PATH",
-                ""
-            )
-            mods_installation_directory_path_provided: bool = bool(
-                raw_mods_installation_directory_path
-                or mods_installation_directory_path is not None
-            )
-            if not mods_installation_directory_path_provided:
-                MODS_INSTALLATION_DIRECTORY_PATH_NOT_PROVIDED_MESSAGE: Final[str] = (
-                    "MODS_INSTALLATION_DIRECTORY_PATH has not been provided. "
-                    "Please provide a valid path to your mods installation directory, "
-                    "either via the `--mods-installation-directory-path` CLI argument, "
-                    "or the MODS_INSTALLATION_DIRECTORY_PATH environment variable."
-                )
-                raise ConfigSettingRequiredError(
-                    MODS_INSTALLATION_DIRECTORY_PATH_NOT_PROVIDED_MESSAGE
-                )
-            if raw_mods_installation_directory_path:
-                mods_installation_directory_path = Path(raw_mods_installation_directory_path)
-            if not mods_installation_directory_path.is_dir():
-                INVALID_MODS_INSTALLATION_DIRECTORY_PATH_MESSAGE: Final[str] = (
-                    "MODS_INSTALLATION_DIRECTORY_PATH must be a valid path "
-                    "to your mods installation directory."
-                )
-                raise ImproperlyConfiguredError(
-                    INVALID_MODS_INSTALLATION_DIRECTORY_PATH_MESSAGE
-                )
-            self._settings["MODS_INSTALLATION_DIRECTORY_PATH"] = (
-                mods_installation_directory_path
+            self._setup_minecraft_installation_directory_path(
+                minecraft_installation_directory_path=minecraft_installation_directory_path
             )
 
-            raw_curseforge_api_key: str = os.getenv(
-                "CURSEFORGE_API_KEY",
-                ""
-            )
-            if not raw_curseforge_api_key and curseforge_api_key is None:
-                logging.warning(
-                    "CURSEFORGE_API_KEY has not been provided. "
-                    "If any mods need to be downloaded from CurseForge, "
-                    "they will fail to be downloaded. "
-                    "Provide your CurseForge API Key, "
-                    "either via the `--curseforge-api-key` CLI argument, "
-                    "or the CURSEFORGE_API_KEY environment variable."
-                )
-            if raw_curseforge_api_key:
-                curseforge_api_key = raw_curseforge_api_key
-            if not re.match(r"\A[A-Za-z0-9$/.]{60}\Z", curseforge_api_key):
-                INVALID_CURSEFORGE_API_KEY_MESSAGE: Final[str] = (
-                    "CURSEFORGE_API_KEY must be a valid CurseForge API Key "
-                    "(see https://console.curseforge.com/?#/api-keys "
-                    "for how to generate CurseForge API keys)."
-                )
-                raise ImproperlyConfiguredError(INVALID_CURSEFORGE_API_KEY_MESSAGE)
-            self._settings["CURSEFORGE_API_KEY"] = curseforge_api_key
+            self._setup_curseforge_api_key(curseforge_api_key=curseforge_api_key)
 
             self._is_env_variables_setup = True
 
@@ -213,7 +287,7 @@ class Settings:
 settings: Final[Settings] = Settings()
 
 
-def setup_env_variables(mods_list_file_path: Path, mods_list: str, mods_installation_directory_path: Path, curseforge_api_key: str) -> None:  # noqa: E501
+def setup_env_variables(mods_list_file_path: Path, mods_list: str, minecraft_installation_directory_path: Path, curseforge_api_key: str) -> None:  # noqa: E501
     """
     Load environment values into the settings dictionary.
 
@@ -222,10 +296,10 @@ def setup_env_variables(mods_list_file_path: Path, mods_list: str, mods_installa
     """
     # noinspection PyProtectedMember
     settings._setup_env_variables(  # noqa: SLF001
-        mods_list_file_path,
-        mods_list,
-        mods_installation_directory_path,
-        curseforge_api_key
+        mods_list_file_path=mods_list_file_path,
+        mods_list=mods_list,
+        minecraft_installation_directory_path=minecraft_installation_directory_path,
+        curseforge_api_key=curseforge_api_key
     )
 
 
