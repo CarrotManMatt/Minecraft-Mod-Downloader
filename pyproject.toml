@@ -141,13 +141,13 @@ task-tags = [
     "NOTE",
     "ISSUE"
 ]
-extend-exclude = [".idea", ".mypy_cache", ".ruff_cache", "__pycache__"]
+extend-exclude = [".idea", ".mypy_cache", ".ruff_cache", "__pycache__", "migrations"]
 
 [tool.ruff.lint.flake8-pytest-style]
 parametrize-values-type = "tuple"
 
 [tool.ruff.lint.mccabe]
-max-complexity = 6
+max-complexity = 8
 
 [tool.ruff.lint.pycodestyle]
 ignore-overlong-task-comments = true
@@ -155,7 +155,7 @@ max-doc-length = 95
 
 [tool.ruff.lint.pylint]
 allow-magic-value-types = []
-max-args = 4
+max-args = 7
 max-branches = 10
 
 [tool.ruff.lint.pyupgrade]

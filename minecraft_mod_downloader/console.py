@@ -104,6 +104,8 @@ def run(argv: Sequence[str] | None = None) -> int:
         help="Increase the verbosity of messages. Mutually exclusive with `--quiet`"
     )
 
+    # TODO: Add mod download filter arguments
+
     parsed_args: Namespace = arg_parser.parse_args(argv)
 
     verbosity: int = 0 if parsed_args.quiet else parsed_args.verbosity + 1
@@ -120,14 +122,13 @@ def run(argv: Sequence[str] | None = None) -> int:
         config.setup_env_variables(
             mods_list_file=parsed_args.mods_list_file,
             mods_list=parsed_args.mods_list,
-            minecraft_installation_directory_path=parsed_args.minecraft_installation_directory_path,  # noqa: E501
+            minecraft_installation_directory_path=parsed_args.minecraft_installation_directory_path,
             curseforge_api_key=parsed_args.curseforge_api_key,
             force_env_variables=parsed_args.force_env_variables,
             verbosity=verbosity
         )
         config.setup_django()
 
-        # management.call_command("makemigrations")
         management.call_command("migrate")
 
     return 0

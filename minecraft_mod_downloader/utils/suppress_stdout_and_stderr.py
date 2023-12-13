@@ -10,9 +10,9 @@ from collections.abc import Sequence
 __all__: Sequence[str] = ("SuppressStdOutAndStdErr",)
 
 import contextlib
+from contextlib import AbstractContextManager
 from io import StringIO
 from types import TracebackType
-from typing import ContextManager
 
 
 class SuppressStdOutAndStdErr:
@@ -32,8 +32,12 @@ class SuppressStdOutAndStdErr:
         to revert back to upon exiting the context manager.
         """
         self.verbosity: int = verbosity
-        self._stdout_redirector: ContextManager = contextlib.redirect_stdout(StringIO())
-        self._stderr_redirector: ContextManager = contextlib.redirect_stderr(StringIO())
+        self._stdout_redirector: AbstractContextManager = contextlib.redirect_stdout(
+            StringIO()
+        )
+        self._stderr_redirector: AbstractContextManager = contextlib.redirect_stderr(
+            StringIO()
+        )
         self._redirectors_were_entered: bool = False
 
     def __enter__(self) -> None:

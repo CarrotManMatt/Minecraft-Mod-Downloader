@@ -1,12 +1,9 @@
-"""
-Django settings for inner "models" project & _mem_db_core app.
-"""
+"""Django settings for inner "models" project & _mem_db_core app."""
 
 from collections.abc import Sequence
 
 __all__: Sequence[str] = ()
 
-import inspect
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / "subdir".

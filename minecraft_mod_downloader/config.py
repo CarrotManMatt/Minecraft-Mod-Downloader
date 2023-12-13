@@ -19,19 +19,22 @@ __all__: Sequence[str] = (
 
 import logging
 import os
-import re
 import platform
+import re
 from collections.abc import Iterable
-from pathlib import Path
-from typing import Any, ClassVar, Final, Self, final
-from identify import identify
 from io import TextIOWrapper
 from logging import Logger
+from pathlib import Path
+from typing import Any, ClassVar, Final, Self, final
 
 import django
 import dotenv
+from identify import identify
 
-from minecraft_mod_downloader.exceptions import ConfigSettingRequiredError, ImproperlyConfiguredError
+from minecraft_mod_downloader.exceptions import (
+    ConfigSettingRequiredError,
+    ImproperlyConfiguredError,
+)
 from minecraft_mod_downloader.parse_mods_list import add_mods_list_to_db
 
 TRUE_VALUES: Final[frozenset[str]] = frozenset({"true", "1", "t", "y", "yes", "on"})
@@ -48,14 +51,14 @@ LOG_LEVEL_CHOICES: Final[Sequence[str]] = (
 
 def get_default_minecraft_installation_directory_path() -> Path:
     system: str = platform.system()
-    if system == "Windows":
+    if system == "Windows":  # noqa: PLR2004
         windows_minecraft_installation_directory_path: Path = (
-            Path(os.getenv('APPDATA')) / ".minecraft"
+            Path(os.getenv("APPDATA")) / ".minecraft"
         )
         if windows_minecraft_installation_directory_path.is_dir():
             return windows_minecraft_installation_directory_path
 
-    if system == "Linux":
+    if system == "Linux":  # noqa: PLR2004
         linux_minecraft_installation_directory_path: Path = Path.home() / ".minecraft"
         if linux_minecraft_installation_directory_path.is_dir():
             return linux_minecraft_installation_directory_path
@@ -66,7 +69,7 @@ def get_default_minecraft_installation_directory_path() -> Path:
         if linux_minecraft_installation_directory_path.is_dir():
             return linux_minecraft_installation_directory_path
 
-    if system == "Darwin":
+    if system == "Darwin":  # noqa: PLR2004
         macos_minecraft_installation_directory_path: Path = (
             Path.home() / "Library/Application Support/minecraft"
         )
@@ -76,7 +79,7 @@ def get_default_minecraft_installation_directory_path() -> Path:
     INDETERMINABLE_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE: Final[str] = (
         "MINECRAFT_INSTALLATION_DIRECTORY_PATH could not be determined, "
         "because either Minecraft is not installable on your Operating System, "
-        f"or no `.minecraft` directory exists."
+        "or no `.minecraft` directory exists."
     )
     raise OSError(INDETERMINABLE_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE)
 
@@ -181,9 +184,9 @@ class Settings:
             raise KeyError(key_error_message) from None
 
     @staticmethod
-    def _setup_logging(verbosity: int | None, force_env_variables: bool = False) -> None:
+    def _setup_logging(*, verbosity: int | None, force_env_variables: bool = False) -> None:
         log_level: str = (
-            os.getenv("LOG_LEVEL", "" if force_env_variables else "INFO").upper()
+            os.getenv("LOG_LEVEL", "" if force_env_variables else "INFO").upper()  # noqa: PLW1508
             if verbosity is None or force_env_variables
             else (
                 "NONE"
@@ -196,7 +199,7 @@ class Settings:
                         if verbosity == 1
                         else (
                             "INFO"
-                            if verbosity == 2
+                            if verbosity == 2  # noqa: PLR2004
                             else "DEBUG"
                         )
                     )
@@ -212,7 +215,7 @@ class Settings:
             )
             raise ImproperlyConfiguredError(INVALID_LOG_LEVEL_MESSAGE)
 
-        if log_level == "NONE":
+        if log_level == "NONE":  # noqa: PLR2004
             logger: Logger = logging.getLogger()
             logger.propagate = False
         else:
@@ -345,7 +348,7 @@ class Settings:
 
         self._settings["CURSEFORGE_API_KEY"] = curseforge_api_key
 
-    def _setup_env_variables(self, *, mods_list_file: TextIOWrapper | None, mods_list: str | None, minecraft_installation_directory_path: Path | None, curseforge_api_key: str | None, force_env_variables: bool = False, verbosity: int = 1) -> None:
+    def _setup_env_variables(self, *, mods_list_file: TextIOWrapper | None, mods_list: str | None, minecraft_installation_directory_path: Path | None, curseforge_api_key: str | None, force_env_variables: bool = False, verbosity: int = 1) -> None:  # noqa: E501
         """
         Load environment values into the settings dictionary.
 
@@ -426,11 +429,11 @@ IS_DJANGO_SETUP: bool
 
 
 def __getattr__(item: str) -> object:
-    if item == "IS_ENV_VARIABLES_SETUP":
+    if item == "IS_ENV_VARIABLES_SETUP":  # noqa: PLR2004
         # noinspection PyProtectedMember
         return settings._is_env_variables_setup  # noqa: SLF001
 
-    if item == "IS_DJANGO_SETUP":
+    if item == "IS_DJANGO_SETUP":  # noqa: PLR2004
         # noinspection PyProtectedMember
         return settings._is_django_setup  # noqa: SLF001
 

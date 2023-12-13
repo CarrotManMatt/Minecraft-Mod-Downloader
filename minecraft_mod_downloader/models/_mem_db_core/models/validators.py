@@ -11,6 +11,7 @@ __all__: Sequence[str] = (
 )
 
 import re
+
 from django.core.validators import RegexValidator
 from django.utils import deconstruct
 from django.utils.translation import gettext_lazy as _

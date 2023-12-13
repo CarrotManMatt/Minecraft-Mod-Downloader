@@ -10,10 +10,9 @@ __all__: Sequence[str] = (
     "MinecraftVersionValidator"
 )
 
-from pathlib import Path
-
-from typing import Any, Final
 from collections.abc import Callable
+from pathlib import Path
+from typing import Any, Final
 
 import pathvalidate
 from django.core.exceptions import ValidationError
@@ -23,11 +22,11 @@ from django.utils.translation import gettext_lazy as _
 
 from minecraft_mod_downloader.models._mem_db_core.models.utils import BaseModel
 from minecraft_mod_downloader.models._mem_db_core.models.validators import (
-    UniqueIdentifierValidator,
     MinecraftVersionValidator,
-    UnsanitisedMinecraftVersionValidator,
     ShortIDValidator,
-    TagNameValidator
+    TagNameValidator,
+    UniqueIdentifierValidator,
+    UnsanitisedMinecraftVersionValidator,
 )
 
 MAX_NAME_LENGTH: Final[int] = 30
@@ -74,7 +73,7 @@ class BaseMod(BaseModel):
             )
         ]
 
-        if len(minecraft_version_parts) == 2:
+        if len(minecraft_version_parts) == 2:  # noqa: PLR2004
             minecraft_version_parts.append("0")
 
         return ".".join(minecraft_version_parts)
@@ -102,7 +101,7 @@ class BaseMod(BaseModel):
     )
 
     class Meta:
-        constraints = [
+        constraints = [  # noqa: RUF012
             models.UniqueConstraint(
                 fields=("minecraft_version", "mod_loader", "_unique_identifier"),
                 name="unique_identifier_per_environment"
@@ -112,8 +111,11 @@ class BaseMod(BaseModel):
     def clean(self) -> None:
         self.minecraft_version = self.sanitise_minecraft_version(self.minecraft_version)
 
-        if len(self.minecraft_version) < 5 or len(self.minecraft_version) > 9:
-            raise ValidationError(f"{_("Invalid")} Minecraft {_("version")}")
+        if len(self.minecraft_version) < 5 or len(self.minecraft_version) > 9:  # noqa: PLR2004
+            INVALID_MINECRAFT_VERSION_MESSAGE: Final[str] = (
+                f"{_("Invalid")} Minecraft {_("version")}"
+            )
+            raise ValidationError(INVALID_MINECRAFT_VERSION_MESSAGE)
 
         try:
             MinecraftVersionValidator()(self.minecraft_version)
@@ -217,7 +219,7 @@ class DetailedMod(BaseMod):
     )
 
     class Meta:
-        constraints = [
+        constraints = [  # noqa: RUF012
             models.UniqueConstraint(
                 fields=("version_id", "name"),
                 name="unique_version_id_per_name"
@@ -238,7 +240,8 @@ class DetailedMod(BaseMod):
             and pathvalidate.is_valid_filename(self.file_name)
         )
         if not file_name_is_valid:
-            raise ValidationError("Invalid file name")
+            INVALID_FILE_NAME_MESSAGE: Final[str] = _("Invalid file name")
+            raise ValidationError(INVALID_FILE_NAME_MESSAGE)
 
     def __str__(self) -> str:
         return self.name
@@ -287,7 +290,7 @@ class APISourceMod(DetailedMod):
 
     class Meta:
         verbose_name = _("API Source Mod")
-        constraints = [
+        constraints = [  # noqa: RUF012
             models.UniqueConstraint(
                 fields=("api_mod_id", "api_source"),
                 name="unique_api_mod_id_per_api_source"

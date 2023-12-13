@@ -4,5 +4,5 @@ from collections.abc import Sequence
 
 __all__: Sequence[str] = ("SuppressTraceback", "SuppressStdOutAndStdErr")
 
+from minecraft_mod_downloader.utils.suppress_stdout_and_stderr import SuppressStdOutAndStdErr
 from minecraft_mod_downloader.utils.suppress_traceback import SuppressTraceback
-from minecraft_mod_downloader.utils.suppress_stdoutand_stderr import SuppressStdOutAndStdErr
