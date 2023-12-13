@@ -109,18 +109,22 @@ class BaseMod(BaseModel):
         ]
 
     def clean(self) -> None:
-        self.minecraft_version = self.sanitise_minecraft_version(self.minecraft_version)
+        if self.minecraft_version:
+            self.minecraft_version = self.sanitise_minecraft_version(self.minecraft_version)
 
-        if len(self.minecraft_version) < 5 or len(self.minecraft_version) > 9:  # noqa: PLR2004
-            INVALID_MINECRAFT_VERSION_MESSAGE: Final[str] = (
-                f"{_("Invalid")} Minecraft {_("version")}"
-            )
-            raise ValidationError(INVALID_MINECRAFT_VERSION_MESSAGE)
+            if len(self.minecraft_version) < 5 or len(self.minecraft_version) > 9:  # noqa: PLR2004
+                INVALID_MINECRAFT_VERSION_MESSAGE: Final[str] = (
+                    f"{_("Invalid")} Minecraft {_("version")}"
+                )
+                raise ValidationError(
+                    {"minecraft_version": INVALID_MINECRAFT_VERSION_MESSAGE},
+                    code="invalid"
+                )
 
-        try:
-            MinecraftVersionValidator()(self.minecraft_version)
-        except ValidationError as e:
-            raise e from e
+            try:
+                MinecraftVersionValidator()(self.minecraft_version)
+            except ValidationError as e:
+                raise ValidationError({"minecraft_version": e}, code="invalid") from e
 
 
 class SimpleMod(BaseMod):
