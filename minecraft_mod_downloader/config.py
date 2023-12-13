@@ -32,6 +32,7 @@ import django
 import dotenv
 
 from minecraft_mod_downloader.exceptions import ConfigSettingRequiredError, ImproperlyConfiguredError
+from minecraft_mod_downloader.parse_mods_list import add_mods_list_to_db
 
 TRUE_VALUES: Final[frozenset[str]] = frozenset({"true", "1", "t", "y", "yes", "on"})
 FALSE_VALUES: Final[frozenset[str]] = frozenset({"false", "0", "f", "n", "no", "off"})
@@ -247,6 +248,7 @@ class Settings:
             else:
                 mods_list = mods_list_file.read()
 
+        add_mods_list_to_db(mods_list)
 
     def _setup_minecraft_installation_directory_path(self, *, minecraft_installation_directory_path: Path | None, force_env_variables: bool = False) -> None:  # noqa: E501
         if minecraft_installation_directory_path is None or force_env_variables:
