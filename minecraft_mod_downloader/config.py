@@ -21,9 +21,12 @@ import logging
 import os
 import re
 import platform
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, ClassVar, Final, Self, final
 from identify import identify
+from io import TextIOWrapper
+from logging import Logger
 
 import django
 import dotenv
@@ -32,9 +35,14 @@ from minecraft_mod_downloader.exceptions import ConfigSettingRequiredError, Impr
 
 TRUE_VALUES: Final[frozenset[str]] = frozenset({"true", "1", "t", "y", "yes", "on"})
 FALSE_VALUES: Final[frozenset[str]] = frozenset({"false", "0", "f", "n", "no", "off"})
-
-
-# def get_mods_list(raw_mods_list: str) -> Iterable[str | ]
+LOG_LEVEL_CHOICES: Final[Sequence[str]] = (
+    "DEBUG",
+    "INFO",
+    "WARNING",
+    "ERROR",
+    "CRITICAL",
+    "NONE"
+)
 
 
 def get_default_minecraft_installation_directory_path() -> Path:
@@ -72,6 +80,37 @@ def get_default_minecraft_installation_directory_path() -> Path:
     raise OSError(INDETERMINABLE_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE)
 
 
+def get_default_mods_list_file_path() -> Path:
+    file_type: str
+    for file_type in ("", "json", "csv", "txt"):
+        cased_file_types: Iterable[str] = {file_type.title(), file_type, file_type.upper()}
+        cased_file_type: str
+        for cased_file_type in cased_file_types:
+            cased_mod: str
+            for cased_mod in ("mod", "Mod", "MOD", "mods", "Mods", "MODS"):
+                mods_list_file_path: Path = Path(f"{cased_mod}.{cased_file_type}")
+                if mods_list_file_path.is_file():
+                    return mods_list_file_path
+
+                seperator: str
+                for seperator in ("-", "_"):
+                    cased_list: str
+                    for cased_list in ("list", "List", "LIST"):
+                        mods_list_file_path = Path(
+                            f"{cased_mod}{seperator}{cased_list}.{cased_file_type}"
+                        )
+                        if mods_list_file_path.is_file():
+                            return mods_list_file_path
+
+    MODS_LIST_FILE_NOT_PROVIDED_MESSAGE: Final[str] = (
+        "MODS_LIST_FILE has not been provided. "
+        "Please provide a valid mods-list file, "
+        "either via the `--mods-list-file` CLI argument, "
+        "or the MODS_LIST_FILE_PATH environment variable."
+    )
+    raise ConfigSettingRequiredError(MODS_LIST_FILE_NOT_PROVIDED_MESSAGE)
+
+
 @final
 class Settings:
     """
@@ -107,7 +146,7 @@ class Settings:
     def __getattr__(self, item: str) -> Any:
         """Retrieve settings value by attribute lookup."""
         self._setup_env_variables(
-            mods_list_file_path=None,
+            mods_list_file=None,
             mods_list=None,
             minecraft_installation_directory_path=None,
             curseforge_api_key=None
@@ -140,50 +179,99 @@ class Settings:
 
             raise KeyError(key_error_message) from None
 
-    def _setup_mods_list(self, mods_list_file_path: Path | None, mods_list: str | None) -> None:  # TODO: get list out of file
-        raw_mods_list_file_path: str = os.getenv("MODS_LIST_FILE_PATH", "")
-        if raw_mods_list_file_path:
-            mods_list_file_path = Path(raw_mods_list_file_path)
-
-        if mods_list is None:
-            if not raw_mods_list_file_path and mods_list_file_path is None:
-                MODS_LIST_FILE_PATH_NOT_PROVIDED_MESSAGE: Final[str] = (
-                    "MODS_LIST_FILE_PATH has not been provided. "
-                    "Please provide a valid path to your mods-list file, "
-                    "either via the `--mods-list-file-path` CLI argument, "
-                    "or the MODS_LIST_FILE_PATH environment variable."
+    @staticmethod
+    def _setup_logging(verbosity: int | None, force_env_variables: bool = False) -> None:
+        log_level: str = (
+            os.getenv("LOG_LEVEL", "" if force_env_variables else "INFO").upper()
+            if verbosity is None or force_env_variables
+            else (
+                "NONE"
+                if verbosity < 0
+                else (
+                    "ERROR"
+                    if verbosity == 0
+                    else (
+                        "WARNING"
+                        if verbosity == 1
+                        else (
+                            "INFO"
+                            if verbosity == 2
+                            else "DEBUG"
+                        )
+                    )
                 )
-                raise ConfigSettingRequiredError(MODS_LIST_FILE_PATH_NOT_PROVIDED_MESSAGE)
-            if raw_mods_list_file_path:
-                mods_list_file_path = Path(raw_mods_list_file_path)
-            if not mods_list_file_path.is_file():
-                INVALID_MODS_LIST_FILE_PATH_MESSAGE: Final[str] = (
-                    "MODS_LIST_FILE_PATH must be a valid path to your mods-list file."
-                )
-                raise ImproperlyConfiguredError(INVALID_MODS_LIST_FILE_PATH_MESSAGE)
-        self._settings["MODS_LIST_FILE_PATH"] = mods_list_file_path
-
-    def _setup_minecraft_installation_directory_path(self, minecraft_installation_directory_path: Path | None) -> None:
-        raw_minecraft_installation_directory_path: str = os.getenv(
-            "MINECRAFT_INSTALLATION_DIRECTORY_PATH",
-            ""
+            )
         )
 
-        if minecraft_installation_directory_path is None:
+        if log_level not in LOG_LEVEL_CHOICES:
+            INVALID_LOG_LEVEL_MESSAGE: Final[str] = (
+                f"LOG_LEVEL must be one of {",".join(
+                    f"{log_level_choice!r}" for log_level_choice in LOG_LEVEL_CHOICES[:-1]
+                )} or {LOG_LEVEL_CHOICES[-1]!r}."
+            )
+            raise ImproperlyConfiguredError(INVALID_LOG_LEVEL_MESSAGE)
+
+        if log_level == "NONE":
+            logger: Logger = logging.getLogger()
+            logger.propagate = False
+        else:
+            # noinspection SpellCheckingInspection
+            logging.basicConfig(
+                level=getattr(logging, log_level),
+                format="%(levelname)s: %(message)s"
+            )
+
+    @staticmethod
+    def _setup_mods_list(*, mods_list_file: TextIOWrapper | None, mods_list: str | None, force_env_variables: bool = False) -> None:  # noqa: E501
+        if mods_list is None or force_env_variables:
+            if mods_list_file is None or force_env_variables:
+                raw_mods_list_file_path: str = os.getenv("MODS_LIST_FILE_PATH", "")
+                mods_list_file_path: Path = (
+                    Path(raw_mods_list_file_path)
+                    if raw_mods_list_file_path or force_env_variables
+                    else get_default_mods_list_file_path()
+                )
+
+                if not mods_list_file_path.is_file():
+                    INVALID_MODS_LIST_FILE_PATH_MESSAGE: Final[str] = (
+                        "MODS_LIST_FILE_PATH must be a valid path to your mods-list file."
+                        "Provide the path to your mods-list file, "
+                        "either via the `--mods-list-file` CLI argument, "
+                        "or the MODS_LIST_FILE_PATH environment variable."
+                    )
+                    raise ImproperlyConfiguredError(INVALID_MODS_LIST_FILE_PATH_MESSAGE)
+
+                with mods_list_file_path.open("r") as mods_list_file:
+                    mods_list = mods_list_file.read()
+
+            else:
+                mods_list = mods_list_file.read()
+
+
+    def _setup_minecraft_installation_directory_path(self, *, minecraft_installation_directory_path: Path | None, force_env_variables: bool = False) -> None:  # noqa: E501
+        if minecraft_installation_directory_path is None or force_env_variables:
+            raw_minecraft_installation_directory_path: str = os.getenv(
+                "MINECRAFT_INSTALLATION_DIRECTORY_PATH",
+                ""
+            )
+
             minecraft_installation_directory_path = (
                 Path(
                     raw_minecraft_installation_directory_path
                 )
-                if raw_minecraft_installation_directory_path
-                else self.get_default_minecraft_installation_directory_path()
+                if raw_minecraft_installation_directory_path or force_env_variables
+                else get_default_minecraft_installation_directory_path()
             )
+
+        def _identify_tags_from_path(path: Path) -> set[str]:
+            return identify.tags_from_path(path)  # type: ignore[arg-type]
 
         path_is_valid_minecraft_installation_directory: bool = bool(
             minecraft_installation_directory_path.is_dir()
             and (minecraft_installation_directory_path / "assets").is_dir()
             and (minecraft_installation_directory_path / "clientID.txt").is_file()
             and (
-                tag in identify.tags_from_path(
+                tag in _identify_tags_from_path(
                     minecraft_installation_directory_path / "clientID.txt"
                 )
                 for tag
@@ -191,7 +279,7 @@ class Settings:
             )
             and (minecraft_installation_directory_path / "launcher_accounts.json").is_file()
             and (
-                tag in identify.tags_from_path(
+                tag in _identify_tags_from_path(
                     minecraft_installation_directory_path / "launcher_accounts.json"
                 )
                 for tag
@@ -199,7 +287,7 @@ class Settings:
             )
             and (minecraft_installation_directory_path / "options.txt").is_file()
             and (
-                tag in identify.tags_from_path(
+                tag in _identify_tags_from_path(
                     minecraft_installation_directory_path / "launcher_accounts.json"
                 )
                 for tag
@@ -211,6 +299,9 @@ class Settings:
             INVALID_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE: Final[str] = (
                 "MINECRAFT_INSTALLATION_DIRECTORY_PATH must be a valid path "
                 "to your Minecraft installation directory."
+                "Provide the path to your Minecraft installation directory, "
+                "either via the `--minecraft-installation-directory-path` CLI argument, "
+                "or the MINECRAFT_INSTALLATION_DIRECTORY_PATH environment variable."
             )
             raise ImproperlyConfiguredError(
                 INVALID_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE
@@ -220,13 +311,13 @@ class Settings:
             minecraft_installation_directory_path
         )
 
-    def _setup_curseforge_api_key(self, curseforge_api_key: str | None) -> None:
-        raw_curseforge_api_key: str = os.getenv(
-            "CURSEFORGE_API_KEY",
-            ""
-        )
+    def _setup_curseforge_api_key(self, *, curseforge_api_key: str | None, force_env_variables: bool = False) -> None:  # noqa: E501
+        if curseforge_api_key is None or force_env_variables:
+            raw_curseforge_api_key: str = os.getenv(
+                "CURSEFORGE_API_KEY",
+                ""
+            )
 
-        if curseforge_api_key is None:
             if not raw_curseforge_api_key:
                 logging.warning(
                     "CURSEFORGE_API_KEY has not been provided. "
@@ -236,6 +327,8 @@ class Settings:
                     "either via the `--curseforge-api-key` CLI argument, "
                     "or the CURSEFORGE_API_KEY environment variable."
                 )
+
+                self._settings["CURSEFORGE_API_KEY"] = None
                 return
 
             curseforge_api_key = raw_curseforge_api_key
@@ -250,7 +343,7 @@ class Settings:
 
         self._settings["CURSEFORGE_API_KEY"] = curseforge_api_key
 
-    def _setup_env_variables(self, mods_list_file_path: Path | None, mods_list: str | None, minecraft_installation_directory_path: Path | None, curseforge_api_key: str | None) -> None:
+    def _setup_env_variables(self, *, mods_list_file: TextIOWrapper | None, mods_list: str | None, minecraft_installation_directory_path: Path | None, curseforge_api_key: str | None, force_env_variables: bool = False, verbosity: int = 1) -> None:
         """
         Load environment values into the settings dictionary.
 
@@ -260,13 +353,23 @@ class Settings:
         if not self._is_env_variables_setup:
             dotenv.load_dotenv()
 
-            self._setup_mods_list(mods_list_file_path=mods_list_file_path, mods_list=mods_list)
+            self._setup_logging(verbosity=verbosity, force_env_variables=force_env_variables)
 
-            self._setup_minecraft_installation_directory_path(
-                minecraft_installation_directory_path=minecraft_installation_directory_path
+            self._setup_mods_list(
+                mods_list_file=mods_list_file,
+                mods_list=mods_list,
+                force_env_variables=force_env_variables
             )
 
-            self._setup_curseforge_api_key(curseforge_api_key=curseforge_api_key)
+            self._setup_minecraft_installation_directory_path(
+                minecraft_installation_directory_path=minecraft_installation_directory_path,
+                force_env_variables=force_env_variables
+            )
+
+            self._setup_curseforge_api_key(
+                curseforge_api_key=curseforge_api_key,
+                force_env_variables=force_env_variables
+            )
 
             self._is_env_variables_setup = True
 
@@ -287,7 +390,7 @@ class Settings:
 settings: Final[Settings] = Settings()
 
 
-def setup_env_variables(mods_list_file_path: Path, mods_list: str, minecraft_installation_directory_path: Path, curseforge_api_key: str) -> None:  # noqa: E501
+def setup_env_variables(*, mods_list_file: TextIOWrapper, mods_list: str, minecraft_installation_directory_path: Path, curseforge_api_key: str, force_env_variables: bool, verbosity: int) -> None:  # noqa: E501
     """
     Load environment values into the settings dictionary.
 
@@ -296,10 +399,12 @@ def setup_env_variables(mods_list_file_path: Path, mods_list: str, minecraft_ins
     """
     # noinspection PyProtectedMember
     settings._setup_env_variables(  # noqa: SLF001
-        mods_list_file_path=mods_list_file_path,
+        mods_list_file=mods_list_file,
         mods_list=mods_list,
         minecraft_installation_directory_path=minecraft_installation_directory_path,
-        curseforge_api_key=curseforge_api_key
+        curseforge_api_key=curseforge_api_key,
+        force_env_variables=force_env_variables,
+        verbosity=verbosity
     )
 
 
