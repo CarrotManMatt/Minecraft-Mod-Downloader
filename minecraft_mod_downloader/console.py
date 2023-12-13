@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from django.core import management
 
 from minecraft_mod_downloader import config
+from minecraft_mod_downloader.utils import SuppressStdOutAndStdErr, SuppressTraceback
 
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
@@ -103,7 +104,6 @@ def run(argv: Sequence[str] | None = None) -> int:
         help="Increase the verbosity of messages. Mutually exclusive with `--quiet`"
     )
 
-    with SuppressTraceback():
     parsed_args: Namespace = arg_parser.parse_args(argv)
 
     verbosity: int = 0 if parsed_args.quiet else parsed_args.verbosity + 1
@@ -116,6 +116,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         if verbosity <= 1:
             verbosity = 1
 
+    with SuppressTraceback(verbosity), SuppressStdOutAndStdErr(verbosity):
         config.setup_env_variables(
             mods_list_file=parsed_args.mods_list_file,
             mods_list=parsed_args.mods_list,
