@@ -1,4 +1,7 @@
+import os
 from collections.abc import Sequence
+
+import django
 
 __all__: Sequence[str] = (
     "BaseMod",
@@ -6,18 +9,19 @@ __all__: Sequence[str] = (
     "CustomSourceMod",
     "APISourceMod",
     "ModTag",
-    "MinecraftVersionValidator"
+    "MinecraftVersionValidator",
+    "UnsanitisedMinecraftVersionValidator"
 )
+os.environ["DJANGO_SETTINGS_MODULE"] = "minecraft_mod_downloader.models._settings"
+django.setup()
 
-from minecraft_mod_downloader import config
-
-if config.IS_DJANGO_SETUP:
-    # noinspection PyProtectedMember
-    from minecraft_mod_downloader.models._mem_db_core.models import (
-        APISourceMod,
-        BaseMod,
-        CustomSourceMod,
-        MinecraftVersionValidator,
-        ModTag,
-        SimpleMod,
-    )
+# noinspection PyProtectedMember
+from minecraft_mod_downloader.models._mem_db_core.models import (
+    APISourceMod,
+    BaseMod,
+    CustomSourceMod,
+    MinecraftVersionValidator,
+    UnsanitisedMinecraftVersionValidator,
+    ModTag,
+    SimpleMod,
+)

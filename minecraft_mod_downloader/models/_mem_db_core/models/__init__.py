@@ -7,7 +7,8 @@ __all__: Sequence[str] = (
     "CustomSourceMod",
     "APISourceMod",
     "ModTag",
-    "MinecraftVersionValidator"
+    "MinecraftVersionValidator",
+    "UnsanitisedMinecraftVersionValidator"
 )
 
 from collections.abc import Callable

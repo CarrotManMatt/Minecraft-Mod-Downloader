@@ -5,8 +5,12 @@ This script performs argument parsing & sends a return code back to the console.
 """
 
 from collections.abc import Sequence
+import os
+import django
 
 __all__: Sequence[str] = ("run",)
+os.environ["DJANGO_SETTINGS_MODULE"] = "minecraft_mod_downloader.models._settings"
+django.setup()
 
 import argparse
 from argparse import ArgumentParser, Namespace

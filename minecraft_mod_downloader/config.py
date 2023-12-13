@@ -7,15 +7,21 @@ These values are used to configure the functionality of the bot at run-time.
 
 from collections.abc import Sequence
 
+import django
+import os
+
 __all__: Sequence[str] = (
     "TRUE_VALUES",
     "FALSE_VALUES",
     "settings",
     "setup_env_variables",
-    "setup_django",
-    "IS_ENV_VARIABLES_SETUP",
-    "IS_DJANGO_SETUP"
+    "IS_ENV_VARIABLES_SETUP"
 )
+
+from django.core.validators import MinLengthValidator
+
+os.environ["DJANGO_SETTINGS_MODULE"] = "minecraft_mod_downloader.models._settings"
+django.setup()
 
 import logging
 import os
