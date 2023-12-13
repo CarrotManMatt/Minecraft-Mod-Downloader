@@ -27,21 +27,16 @@ import logging
 import os
 import platform
 import re
-from collections.abc import Iterable
-from io import TextIOWrapper
 from logging import Logger
 from pathlib import Path
 from typing import Any, ClassVar, Final, Self, final
 
-import django
 import dotenv
 from identify import identify
 
-from minecraft_mod_downloader.exceptions import (
-    ConfigSettingRequiredError,
-    ImproperlyConfiguredError,
-)
-from minecraft_mod_downloader.parse_mods_list import add_mods_list_to_db
+from minecraft_mod_downloader.exceptions import ImproperlyConfiguredError
+from minecraft_mod_downloader.models import BaseMod
+from minecraft_mod_downloader.models import UnsanitisedMinecraftVersionValidator
 
 TRUE_VALUES: Final[frozenset[str]] = frozenset({"true", "1", "t", "y", "yes", "on"})
 FALSE_VALUES: Final[frozenset[str]] = frozenset({"false", "0", "f", "n", "no", "off"})
@@ -90,35 +85,8 @@ def get_default_minecraft_installation_directory_path() -> Path:
     raise OSError(INDETERMINABLE_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE)
 
 
-def get_default_mods_list_file_path() -> Path:
-    file_type: str
-    for file_type in ("", "json", "csv", "txt"):
-        cased_file_types: Iterable[str] = {file_type.title(), file_type, file_type.upper()}
-        cased_file_type: str
-        for cased_file_type in cased_file_types:
-            cased_mod: str
-            for cased_mod in ("mod", "Mod", "MOD", "mods", "Mods", "MODS"):
-                mods_list_file_path: Path = Path(f"{cased_mod}.{cased_file_type}")
-                if mods_list_file_path.is_file():
-                    return mods_list_file_path
-
-                seperator: str
-                for seperator in ("-", "_"):
-                    cased_list: str
-                    for cased_list in ("list", "List", "LIST"):
-                        mods_list_file_path = Path(
-                            f"{cased_mod}{seperator}{cased_list}.{cased_file_type}"
-                        )
-                        if mods_list_file_path.is_file():
-                            return mods_list_file_path
-
-    MODS_LIST_FILE_NOT_PROVIDED_MESSAGE: Final[str] = (
-        "MODS_LIST_FILE has not been provided. "
-        "Please provide a valid mods-list file, "
-        "either via the `--mods-list-file` CLI argument, "
-        "or the MODS_LIST_FILE_PATH environment variable."
-    )
-    raise ConfigSettingRequiredError(MODS_LIST_FILE_NOT_PROVIDED_MESSAGE)
+def get_default_minecraft_version(minecraft_installation_directory_path: Path) -> str:
+    raise NotImplementedError  # TODO
 
 
 @final
@@ -150,16 +118,15 @@ class Settings:
     def __init__(self) -> None:
         """Instantiate a new settings container with False is_setup flags."""
         self._is_env_variables_setup: bool = False
-        self._is_django_setup: bool = False
         self._settings: dict[str, object] = {}
 
     def __getattr__(self, item: str) -> Any:
         """Retrieve settings value by attribute lookup."""
         self._setup_env_variables(
-            mods_list_file=None,
-            mods_list=None,
             minecraft_installation_directory_path=None,
-            curseforge_api_key=None
+            curseforge_api_key=None,
+            filter_minecraft_version=None,
+            filter_mod_loader=None
         )
 
         if item in self._settings:
@@ -231,34 +198,6 @@ class Settings:
                 format="%(levelname)s: %(message)s"
             )
 
-    @staticmethod
-    def _setup_mods_list(*, mods_list_file: TextIOWrapper | None, mods_list: str | None, force_env_variables: bool = False) -> None:  # noqa: E501
-        if mods_list is None or force_env_variables:
-            if mods_list_file is None or force_env_variables:
-                raw_mods_list_file_path: str = os.getenv("MODS_LIST_FILE_PATH", "")
-                mods_list_file_path: Path = (
-                    Path(raw_mods_list_file_path)
-                    if raw_mods_list_file_path or force_env_variables
-                    else get_default_mods_list_file_path()
-                )
-
-                if not mods_list_file_path.is_file():
-                    INVALID_MODS_LIST_FILE_PATH_MESSAGE: Final[str] = (
-                        "MODS_LIST_FILE_PATH must be a valid path to your mods-list file."
-                        "Provide the path to your mods-list file, "
-                        "either via the `--mods-list-file` CLI argument, "
-                        "or the MODS_LIST_FILE_PATH environment variable."
-                    )
-                    raise ImproperlyConfiguredError(INVALID_MODS_LIST_FILE_PATH_MESSAGE)
-
-                with mods_list_file_path.open("r") as mods_list_file:
-                    mods_list = mods_list_file.read()
-
-            else:
-                mods_list = mods_list_file.read()
-
-        add_mods_list_to_db(mods_list)
-
     def _setup_minecraft_installation_directory_path(self, *, minecraft_installation_directory_path: Path | None, force_env_variables: bool = False) -> None:  # noqa: E501
         if minecraft_installation_directory_path is None or force_env_variables:
             raw_minecraft_installation_directory_path: str = os.getenv(
@@ -299,7 +238,7 @@ class Settings:
             and (minecraft_installation_directory_path / "options.txt").is_file()
             and (
                 tag in _identify_tags_from_path(
-                    minecraft_installation_directory_path / "launcher_accounts.json"
+                    minecraft_installation_directory_path / "options.txt"
                 )
                 for tag
                 in ("file", "text", "plain-text")
@@ -354,7 +293,32 @@ class Settings:
 
         self._settings["CURSEFORGE_API_KEY"] = curseforge_api_key
 
-    def _setup_env_variables(self, *, mods_list_file: TextIOWrapper | None, mods_list: str | None, minecraft_installation_directory_path: Path | None, curseforge_api_key: str | None, force_env_variables: bool = False, verbosity: int = 1) -> None:  # noqa: E501
+    def _setup_filter_minecraft_version(self, *, filter_minecraft_version: str | None, force_env_variables: bool = False) -> None:  # noqa: E501
+        if filter_minecraft_version is None or force_env_variables:
+            raw_filter_minecraft_version: str = os.getenv(
+                "FILTER_MINECRAFT_VERSION",
+                ""
+            )
+
+            filter_minecraft_version = (
+                raw_filter_minecraft_version
+                if raw_filter_minecraft_version
+                else get_default_minecraft_version(
+                    self._settings["MINECRAFT_INSTALLATION_DIRECTORY_PATH"]  # type: ignore[arg-type]
+                )
+            )
+
+        UnsanitisedMinecraftVersionValidator()(filter_minecraft_version)
+        MinLengthValidator(2)(filter_minecraft_version)
+        filter_minecraft_version_cleaner: BaseMod = object()  # type: ignore[assignment]
+        filter_minecraft_version_cleaner.minecraft_version = filter_minecraft_version
+        filter_minecraft_version_cleaner.clean = BaseMod.clean
+        filter_minecraft_version_cleaner.sanitise_minecraft_version = BaseMod.sanitise_minecraft_version
+        filter_minecraft_version_cleaner.clean()
+
+        self._settings["FILTER_MINECRAFT_VERSION"] = filter_minecraft_version
+
+    def _setup_env_variables(self, *, minecraft_installation_directory_path: Path | None, curseforge_api_key: str | None, filter_minecraft_version: str | None, filter_mod_loader: BaseMod.ModLoader | None, dry_run: bool = False, force_env_variables: bool = False, verbosity: int = 1) -> None:  # noqa: E501
         """
         Load environment values into the settings dictionary.
 
@@ -366,12 +330,6 @@ class Settings:
 
             self._setup_logging(verbosity=verbosity, force_env_variables=force_env_variables)
 
-            self._setup_mods_list(
-                mods_list_file=mods_list_file,
-                mods_list=mods_list,
-                force_env_variables=force_env_variables
-            )
-
             self._setup_minecraft_installation_directory_path(
                 minecraft_installation_directory_path=minecraft_installation_directory_path,
                 force_env_variables=force_env_variables
@@ -382,26 +340,15 @@ class Settings:
                 force_env_variables=force_env_variables
             )
 
+            self._settings["DRY_RUN"] = dry_run
+
             self._is_env_variables_setup = True
-
-    def _setup_django(self) -> None:
-        """
-        Load the correct settings module into the Django process.
-
-        Scripts cannot access model instances & database data until
-        Django's settings module has been loaded.
-        """
-        if not self._is_django_setup:
-            os.environ["DJANGO_SETTINGS_MODULE"] = "minecraft_mod_downloader.models._settings"
-            django.setup()
-
-            self._is_django_setup = True
 
 
 settings: Final[Settings] = Settings()
 
 
-def setup_env_variables(*, mods_list_file: TextIOWrapper, mods_list: str, minecraft_installation_directory_path: Path, curseforge_api_key: str, force_env_variables: bool, verbosity: int) -> None:  # noqa: E501
+def setup_env_variables(*, minecraft_installation_directory_path: Path, curseforge_api_key: str, filter_minecraft_version: str, filter_mod_loader: BaseMod.ModLoader, dry_run: bool, force_env_variables: bool, verbosity: int) -> None:  # noqa: E501
     """
     Load environment values into the settings dictionary.
 
@@ -410,38 +357,23 @@ def setup_env_variables(*, mods_list_file: TextIOWrapper, mods_list: str, minecr
     """
     # noinspection PyProtectedMember
     settings._setup_env_variables(  # noqa: SLF001
-        mods_list_file=mods_list_file,
-        mods_list=mods_list,
         minecraft_installation_directory_path=minecraft_installation_directory_path,
         curseforge_api_key=curseforge_api_key,
+        filter_minecraft_version=filter_minecraft_version,
+        filter_mod_loader=filter_mod_loader,
+        dry_run=dry_run,
         force_env_variables=force_env_variables,
         verbosity=verbosity
     )
 
 
-def setup_django() -> None:
-    """
-    Load the correct settings module into the Django process.
-
-    Scripts cannot access model instances & database data until
-    Django's settings module has been loaded.
-    """
-    # noinspection PyProtectedMember
-    settings._setup_django()  # noqa: SLF001
-
-
 IS_ENV_VARIABLES_SETUP: bool
-IS_DJANGO_SETUP: bool
 
 
 def __getattr__(item: str) -> object:
     if item == "IS_ENV_VARIABLES_SETUP":  # noqa: PLR2004
         # noinspection PyProtectedMember
         return settings._is_env_variables_setup  # noqa: SLF001
-
-    if item == "IS_DJANGO_SETUP":  # noqa: PLR2004
-        # noinspection PyProtectedMember
-        return settings._is_django_setup  # noqa: SLF001
 
     MODULE_ATTRIBUTE_ERROR_MESSAGE: Final[str] = (
         f"module {__name__!r} has no attribute {item!r}"

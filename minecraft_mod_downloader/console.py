@@ -20,14 +20,15 @@ from django.core import management
 
 from minecraft_mod_downloader import config
 from minecraft_mod_downloader.utils import SuppressStdOutAndStdErr, SuppressTraceback
+from minecraft_mod_downloader import parse_mods_list
 
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
     from argparse import _MutuallyExclusiveGroup as MutuallyExclusiveGroup
 
 
-def run(argv: Sequence[str] | None = None) -> int:
-    """Run the Minecraft Mod Downloader tool as a CLI tool with argument parsing."""
+def set_up_arg_parser() -> ArgumentParser:
+    # TODO: Named groups
     arg_parser: ArgumentParser = ArgumentParser(
         description=(
             "Download the given list of Minecraft mods into your installation mod directory"
@@ -74,6 +75,24 @@ def run(argv: Sequence[str] | None = None) -> int:
             "to be downloaded from the CurseForge API, a key is not required."
         )
     )
+
+    arg_parser.add_argument(
+        "--filter-minecraft-version",
+        help=(
+            "The Minecraft version to download compatible mods for. "
+            "If this option is not provided, the latest version "
+            "from your MINECRAFT_INSTALLATION_DIRECTORY will be used."
+        )
+    )
+    arg_parser.add_argument(
+        "--filter-mod-loader",
+        help=(
+            "The mod loader to download compatible mods for. "
+            "If this option is not provided, "
+            "the mod loader of the profile with the latest version will be used"
+        )
+    )
+
     arg_parser.add_argument(
         "-D",
         "--dry-run",
@@ -108,7 +127,13 @@ def run(argv: Sequence[str] | None = None) -> int:
         help="Increase the verbosity of messages. Mutually exclusive with `--quiet`"
     )
 
-    # TODO: Add mod download filter arguments
+    return arg_parser
+
+
+def run(argv: Sequence[str] | None = None) -> int:
+    """Run the Minecraft Mod Downloader tool as a CLI tool with argument parsing."""
+
+    arg_parser: ArgumentParser = set_up_arg_parser()
 
     parsed_args: Namespace = arg_parser.parse_args(argv)
 
@@ -122,17 +147,27 @@ def run(argv: Sequence[str] | None = None) -> int:
         if verbosity <= 1:
             verbosity = 1
 
-    with SuppressTraceback(verbosity), SuppressStdOutAndStdErr(verbosity):
-        config.setup_env_variables(
-            mods_list_file=parsed_args.mods_list_file,
-            mods_list=parsed_args.mods_list,
-            minecraft_installation_directory_path=parsed_args.minecraft_installation_directory_path,
-            curseforge_api_key=parsed_args.curseforge_api_key,
-            force_env_variables=parsed_args.force_env_variables,
-            verbosity=verbosity
-        )
-        config.setup_django()
+    with SuppressTraceback(verbosity):
+        with SuppressStdOutAndStdErr(verbosity):
+            config.setup_env_variables(
+                minecraft_installation_directory_path=parsed_args.minecraft_installation_directory_path,
+                curseforge_api_key=parsed_args.curseforge_api_key,
+                filter_minecraft_version=parsed_args.filter_minecraft_version,
+                filter_mod_loader=parsed_args.filter_mod_loader,
+                dry_run=parsed_args.dry_run,
+                force_env_variables=parsed_args.force_env_variables,
+                verbosity=verbosity
+            )
+            config.setup_django()
 
-        management.call_command("migrate")
+        with SuppressStdOutAndStdErr(verbosity - 1):
+            management.call_command("migrate")
+
+        with SuppressStdOutAndStdErr(verbosity):
+            parse_mods_list.setup_raw_mods_list(
+                mods_list_file=parsed_args.mods_list_file,
+                mods_list=",".join(parsed_args.mods_list),
+                force_env_variables=parsed_args.force_env_variables
+            )
 
     return 0
