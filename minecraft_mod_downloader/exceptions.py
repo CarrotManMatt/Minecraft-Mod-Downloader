@@ -28,7 +28,7 @@ class BaseError(BaseException, abc.ABC):
         attributes: set[str] = set(self.__dict__.keys())
         attributes.discard("message")
         if attributes:
-            formatted += f""" ({", ".join({f"{attribute=}" for attribute in attributes})})"""
+            formatted += f" ({", ".join({f"{attribute=}" for attribute in attributes})})"
 
         return formatted
 

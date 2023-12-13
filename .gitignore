@@ -122,5 +122,7 @@ cython_debug/
 local/
 *.sqlite3
 *.db
-Mods.json
-mods-list.*
+[mM]ods.json
+[mM]ods.csv
+[mM]ods.txt
+[mM]ods[-_ ][Ll]ist.*

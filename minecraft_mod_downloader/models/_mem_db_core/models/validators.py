@@ -35,7 +35,7 @@ class MinecraftVersionValidator(RegexValidator):
 
     MINECRAFT_VERSION_RE: str = r"\A1\.[1-9]\d{0,2}\.(?:0|[1-9]\d?)\Z"
 
-    message: str = f"""{_("Invalid")} Minecraft {_("version")}"""
+    message: str = f"{_("Invalid")} Minecraft {_("version")}"
     regex: re.Pattern[str] = re.compile(MINECRAFT_VERSION_RE)
 
 
@@ -45,7 +45,7 @@ class UnsanitisedMinecraftVersionValidator(RegexValidator):
 
     UNSANITISED_MINECRAFT_VERSION_RE: str = r"\A0*1\.0*[1-9]\d{0,2}(?:\.0*(?:0|[1-9]\d?))?\Z"
 
-    message: str = f"""{_("Invalid unsanitised")} Minecraft {_("version")}"""
+    message: str = f"{_("Invalid unsanitised")} Minecraft {_("version")}"
     regex: re.Pattern[str] = re.compile(UNSANITISED_MINECRAFT_VERSION_RE)
 
 

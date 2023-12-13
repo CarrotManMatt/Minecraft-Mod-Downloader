@@ -80,7 +80,7 @@ class BaseMod(BaseModel):
         return ".".join(minecraft_version_parts)
 
     minecraft_version = models.CharField(
-        f"""Minecraft {_("Version")}""",
+        f"Minecraft {_("Version")}",
         max_length=9,
         validators=[UnsanitisedMinecraftVersionValidator(), MinLengthValidator(3)],
         blank=False,
@@ -113,7 +113,7 @@ class BaseMod(BaseModel):
         self.minecraft_version = self.sanitise_minecraft_version(self.minecraft_version)
 
         if len(self.minecraft_version) < 5 or len(self.minecraft_version) > 9:
-            raise ValidationError(f"""{_("Invalid")} Minecraft {_("version")}""")
+            raise ValidationError(f"{_("Invalid")} Minecraft {_("version")}")
 
         try:
             MinecraftVersionValidator()(self.minecraft_version)
