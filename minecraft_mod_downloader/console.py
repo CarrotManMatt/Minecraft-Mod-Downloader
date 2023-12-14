@@ -12,7 +12,7 @@ import argparse
 from argparse import ArgumentParser, Namespace
 from typing import TYPE_CHECKING
 
-from minecraft_mod_downloader.exceptions import ConfigSettingRequiredError, ImproperlyConfiguredError
+from minecraft_mod_downloader.exceptions import ImproperlyConfiguredError
 from minecraft_mod_downloader.models import ModLoader
 
 from minecraft_mod_downloader import config
@@ -156,6 +156,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         if verbosity <= 1:
             verbosity = 1
 
+    e: ImproperlyConfiguredError
     try:
         config.run_setup(
             minecraft_mods_installation_directory_path=parsed_args.minecraft_mods_installation_directory_path,
@@ -178,7 +179,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 ),
                 force_env_variables=parsed_args.force_env_variables,
             )
-    except (ImproperlyConfiguredError, ConfigSettingRequiredError) as e:
+    except ImproperlyConfiguredError as e:
         arg_parser.error(str(e))
         return 2
 

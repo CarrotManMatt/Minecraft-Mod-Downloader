@@ -59,6 +59,7 @@ class BaseMod(BaseModel):
         else:
             return minecraft_version
 
+        e: ValidationError
         try:
             UnsanitisedMinecraftVersionValidator()(minecraft_version)
         except ValidationError as e:
@@ -125,6 +126,7 @@ class BaseMod(BaseModel):
                     code="invalid"
                 )
 
+            e: ValidationError
             try:
                 MinecraftVersionValidator()(self.minecraft_version)
             except ValidationError as e:

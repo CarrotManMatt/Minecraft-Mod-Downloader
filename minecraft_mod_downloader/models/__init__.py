@@ -14,6 +14,7 @@ __all__: Sequence[str] = (
     "UnsanitisedMinecraftVersionValidator"
 )
 os.environ["DJANGO_SETTINGS_MODULE"] = "minecraft_mod_downloader.models._settings"
+e: RuntimeError
 try:
     django.setup()
 except RuntimeError as e:
