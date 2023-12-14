@@ -16,7 +16,10 @@ from io import TextIOWrapper
 from pathlib import Path
 from typing import Final, Any
 
-from minecraft_mod_downloader.exceptions import ConfigSettingRequiredError, ImproperlyConfiguredError
+from django.core.exceptions import ValidationError
+
+from minecraft_mod_downloader.config import settings
+from minecraft_mod_downloader.exceptions import ConfigSettingRequiredError, ImproperlyConfiguredError, ModListEntryLoadError
 from minecraft_mod_downloader.models import SimpleMod
 
 
@@ -42,8 +45,7 @@ def get_default_mods_list_file_path() -> Path:
                         if mods_list_file_path.is_file():
                             return mods_list_file_path
 
-    MODS_LIST_FILE_NOT_PROVIDED_MESSAGE: Final[str] = "MODS_LIST_FILE has not been provided"
-    raise ConfigSettingRequiredError(MODS_LIST_FILE_NOT_PROVIDED_MESSAGE)
+    raise ConfigSettingRequiredError(environment_variable_name="MODS_LIST_FILE")
 
 
 def setup_raw_mods_list(*, mods_list_file: TextIOWrapper | None, mods_list: str | None, force_env_variables: bool = False) -> None:  # noqa: E501
@@ -78,10 +80,21 @@ def load_from_mapping(raw_mods_list_dict: Mapping[str, Any]) -> None:
 def load_from_single_depth_iterable(raw_mods_list_iterable: Iterable[str]) -> None:
     raw_identifier: str
     for raw_identifier in raw_mods_list_iterable:
-        SimpleMod.objects.get_or_create(_unique_identifier=raw_identifier)
+        try:
+            SimpleMod.objects.get_or_create(
+                _unique_identifier=raw_identifier,
+                minecraft_version=settings["FILTER_MINECRAFT_VERSION"],
+                mod_loader=settings["FILTER_MOD_LOADER"]
+            )
+        except ValidationError as e:
+            raise ModListEntryLoadError(
+                unique_identifier=raw_identifier, reason=e
+            ) from None
+
 
 
 def load_from_multi_depth_iterable(raw_mods_list_iterable: Iterable[Iterable[str]]) -> None:
+    print(list(raw_mods_list_iterable))
     raise NotImplementedError()  # TODO
 
 
@@ -100,7 +113,7 @@ def load_from_str(raw_mods_list: str) -> None:
         raise ValueError(EMPTY_MODS_LIST_ERROR)
 
     if len(raw_mods_list_collection) == 1:
-        load_from_single_depth_iterable(raw_mods_list.split(","))
+        load_from_single_depth_iterable(raw_mods_list.strip("\n").split(","))
 
     else:
         load_from_multi_depth_iterable(
