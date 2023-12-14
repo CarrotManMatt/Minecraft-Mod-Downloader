@@ -35,7 +35,7 @@ import dotenv
 from identify import identify
 
 from minecraft_mod_downloader.exceptions import ImproperlyConfiguredError
-from minecraft_mod_downloader.models import BaseMod
+from minecraft_mod_downloader.models import BaseMod, MinecraftVersionValidator, ModLoader
 from minecraft_mod_downloader.models import UnsanitisedMinecraftVersionValidator
 
 TRUE_VALUES: Final[frozenset[str]] = frozenset({"true", "1", "t", "y", "yes", "on"})
@@ -318,7 +318,7 @@ class Settings:
 
         self._settings["FILTER_MINECRAFT_VERSION"] = filter_minecraft_version
 
-    def _setup_env_variables(self, *, minecraft_installation_directory_path: Path | None, curseforge_api_key: str | None, filter_minecraft_version: str | None, filter_mod_loader: BaseMod.ModLoader | None, dry_run: bool = False, force_env_variables: bool = False, verbosity: int = 1) -> None:  # noqa: E501
+    def _setup_env_variables(self, *, minecraft_mods_installation_directory_path: Path | None, minecraft_versions_directory_path: Path | None, curseforge_api_key: str | None, filter_minecraft_version: str | None, filter_mod_loader: ModLoader | None, dry_run: bool = False, force_env_variables: bool = False, verbosity: int = 1) -> None:  # noqa: E501
         """
         Load environment values into the settings dictionary.
 
@@ -348,7 +348,6 @@ class Settings:
 settings: Final[Settings] = Settings()
 
 
-def setup_env_variables(*, minecraft_installation_directory_path: Path, curseforge_api_key: str, filter_minecraft_version: str, filter_mod_loader: BaseMod.ModLoader, dry_run: bool, force_env_variables: bool, verbosity: int) -> None:  # noqa: E501
     """
     Load environment values into the settings dictionary.
 
@@ -365,6 +364,7 @@ def setup_env_variables(*, minecraft_installation_directory_path: Path, cursefor
         force_env_variables=force_env_variables,
         verbosity=verbosity
     )
+def run_setup(*, minecraft_mods_installation_directory_path: Path, minecraft_versions_directory_path: Path, curseforge_api_key: str, filter_minecraft_version: str, filter_mod_loader: ModLoader, dry_run: bool, force_env_variables: bool, verbosity: int) -> None:  # noqa: E501
 
 
 IS_ENV_VARIABLES_SETUP: bool

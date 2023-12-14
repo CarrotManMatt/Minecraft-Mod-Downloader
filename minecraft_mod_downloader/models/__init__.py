@@ -8,6 +8,7 @@ __all__: Sequence[str] = (
     "SimpleMod",
     "CustomSourceMod",
     "APISourceMod",
+    "ModLoader",
     "ModTag",
     "MinecraftVersionValidator",
     "UnsanitisedMinecraftVersionValidator"
@@ -24,4 +25,5 @@ from minecraft_mod_downloader.models._mem_db_core.models import (
     UnsanitisedMinecraftVersionValidator,
     ModTag,
     SimpleMod,
+    ModLoader
 )

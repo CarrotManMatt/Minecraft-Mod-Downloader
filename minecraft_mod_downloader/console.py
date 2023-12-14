@@ -17,6 +17,7 @@ from argparse import ArgumentParser, Namespace
 from typing import TYPE_CHECKING
 
 from django.core import management
+from minecraft_mod_downloader.models import ModLoader
 
 from minecraft_mod_downloader import config
 from minecraft_mod_downloader.utils import SuppressStdOutAndStdErr, SuppressTraceback
@@ -86,6 +87,7 @@ def set_up_arg_parser() -> ArgumentParser:
     )
     arg_parser.add_argument(
         "--filter-mod-loader",
+        type=ModLoader,
         help=(
             "The mod loader to download compatible mods for. "
             "If this option is not provided, "

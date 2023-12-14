@@ -8,7 +8,8 @@ __all__: Sequence[str] = (
     "APISourceMod",
     "ModTag",
     "MinecraftVersionValidator",
-    "UnsanitisedMinecraftVersionValidator"
+    "UnsanitisedMinecraftVersionValidator",
+    "ModLoader"
 )
 
 from collections.abc import Callable
@@ -39,13 +40,15 @@ MAX_MOD_ID_LENGTH: Final[int] = MAX_VERSION_ID_LENGTH
 assert MAX_FILE_NAME_LENGTH >= MAX_NAME_LENGTH
 
 
-class BaseMod(BaseModel):
-    class ModLoader(models.TextChoices):
-        """Enum of mod loader ID & display values of each mod loader."""
+class ModLoader(models.TextChoices):
+    """Enum of mod loader ID & display values of each mod loader."""
 
-        FORGE = "FO"
-        FABRIC = "FA"
-        QUILT = "QU"
+    FORGE = "FO"
+    FABRIC = "FA"
+    QUILT = "QU"
+
+
+class BaseMod(BaseModel):
 
     @staticmethod
     def sanitise_minecraft_version(minecraft_version: str) -> str:
@@ -113,7 +116,7 @@ class BaseMod(BaseModel):
         if self.minecraft_version:
             self.minecraft_version = self.sanitise_minecraft_version(self.minecraft_version)
 
-            if len(self.minecraft_version) < 5 or len(self.minecraft_version) > 9:  # noqa: PLR2004
+            if not (5 <= len(self.minecraft_version) <= 9):  # noqa: PLR2004
                 INVALID_MINECRAFT_VERSION_MESSAGE: Final[str] = (
                     f"{_("Invalid")} Minecraft {_("version")}"
                 )
@@ -240,11 +243,11 @@ class DetailedMod(BaseMod):
         ]
 
     def clean(self) -> None:
-        file_name_is_valid: bool = bool(
+        FILE_NAME_IS_VALID: Final[bool] = bool(
             self.file_name.endswith(".jar")
             and pathvalidate.is_valid_filename(self.file_name)
         )
-        if not file_name_is_valid:
+        if not FILE_NAME_IS_VALID:
             INVALID_FILE_NAME_MESSAGE: Final[str] = _("Invalid file name")
             raise ValidationError(INVALID_FILE_NAME_MESSAGE)
 
