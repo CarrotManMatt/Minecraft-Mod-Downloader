@@ -12,7 +12,7 @@ import argparse
 from argparse import ArgumentParser, Namespace
 from typing import TYPE_CHECKING
 
-from django.core import management
+from minecraft_mod_downloader.exceptions import ConfigSettingRequiredError, ImproperlyConfiguredError
 from minecraft_mod_downloader.models import ModLoader
 
 from minecraft_mod_downloader import config
@@ -27,14 +27,15 @@ if TYPE_CHECKING:
 def set_up_arg_parser() -> ArgumentParser:
     # TODO: Named groups
     arg_parser: ArgumentParser = ArgumentParser(
+        prog="minecraft-mod-downloader",
         description=(
             "Download the given list of Minecraft mods into your installation mod directory"
         ),
         usage=(
-            "%(prog)s [-h] [-D] [-E] [-q | -v | -vv | -vvv] "
-            "[--mods-list-file MODS_LIST_FILE | --mods-list [MODS_LIST ...]] "
-            "[--minecraft-installation-directory MINECRAFT_INSTALLATION_DIRECTORY] "
-            "[--curseforge-api-key CURSEFORGE_API_KEY]"
+            "%(prog)s [-h] [-D] [-E] [-q | -v] "
+            "[--mods-list MODS_LIST] "
+            "--filter-minecraft-version FILTER_MINECRAFT_VERSION"
+            "--filter-mod-loader FILTER_MOD_LOADER"
         )
     )
 
@@ -56,11 +57,21 @@ def set_up_arg_parser() -> ArgumentParser:
     )
 
     arg_parser.add_argument(
-        "--minecraft-installation-directory",
-        dest="minecraft_installation_directory_path",
+        "--minecraft-mods-installation-directory",
+        dest="minecraft_mods_installation_directory_path",
         help=(
-            "Path to the directory containing your minecraft installation & "
-            "mods folder within that"
+            "Path to the directory where your Minecraft mods are installed to. "
+            "If this option is not provided, the path will be determined "
+            "from the default Minecraft installation directory path."
+        )
+    )
+    arg_parser.add_argument(
+        "--minecraft-versions-directory",
+        dest="minecraft_versions_directory_path",
+        help=(
+            "Path to the directory where your Minecraft versions are stored. "
+            "If this option is not provided, the path will be determined "
+            "from the default Minecraft installation directory path."
         )
     )
     arg_parser.add_argument(

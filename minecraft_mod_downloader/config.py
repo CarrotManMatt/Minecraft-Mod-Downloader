@@ -28,6 +28,11 @@ from typing import Any, ClassVar, Final, Self, final
 import dotenv
 from identify import identify
 
+from django.core import management
+from django.core.validators import MinLengthValidator
+
+from minecraft_mod_downloader.utils import SuppressStdOutAndStdErr, SuppressTraceback
+
 from minecraft_mod_downloader.exceptions import ImproperlyConfiguredError
 from minecraft_mod_downloader.models import BaseMod, MinecraftVersionValidator, ModLoader
 from minecraft_mod_downloader.models import UnsanitisedMinecraftVersionValidator
@@ -44,43 +49,259 @@ LOG_LEVEL_CHOICES: Final[Sequence[str]] = (
 )
 
 
+def identify_tags_from_path(path: Path) -> set[str]:
+    return identify.tags_from_path(path)  # type: ignore[arg-type]
+
+
+def minecraft_version_name_is_regex_valid(minecraft_version_name: str) -> bool:
+    try:
+        MinecraftVersionValidator()(minecraft_version_name)
+    except ValidationError:
+        return False
+    else:
+        return True
+
+
+def minecraft_version_path_is_valid(minecraft_version_path: Path) -> bool:
+    return bool(
+        minecraft_version_path.is_dir()
+        and (
+            (
+                (
+                    "fabric" in minecraft_version_path.name
+                    or "quilt" in minecraft_version_path.name
+                )
+                and minecraft_version_name_is_regex_valid(
+                    minecraft_version_path.name.split("-")[-1]
+                    if minecraft_version_path.name.split("-")[-1].count(".") == 2
+                    else minecraft_version_path.name.split("-")[-1] + ".0"
+                )
+                and 5 <= len(
+                    minecraft_version_path.name.split("-")[-1]
+                    if minecraft_version_path.name.split("-")[-1].count(".") == 2
+                    else minecraft_version_path.name.split("-")[-1] + ".0"
+                ) <= 9
+            )
+            or (
+                "forge" in minecraft_version_path.name
+                and minecraft_version_name_is_regex_valid(
+                    minecraft_version_path.name.split("-")[0]
+                    if minecraft_version_path.name.split("-")[0].count(".") == 2
+                    else minecraft_version_path.name.split("-")[0] + ".0"
+                )
+                and 5 <= len(
+                    minecraft_version_path.name.split("-")[0]
+                    if minecraft_version_path.name.split("-")[0].count(".") == 2
+                    else minecraft_version_path.name.split("-")[0] + ".0"
+                ) <= 9
+            )
+        )
+        and (minecraft_version_path / f"{minecraft_version_path.name}.json").is_file()
+        and all(
+            tag in identify_tags_from_path(
+                minecraft_version_path / f"{minecraft_version_path.name}.json"
+            )
+            for tag
+            in ("file", "text", "json")
+        )
+    )
+
+
+def minecraft_versions_directory_path_contains_a_valid_version(_minecraft_versions_directory_path: Path) -> bool:  # noqa: E501
+    minecraft_version_path: Path
+    for minecraft_version_path in _minecraft_versions_directory_path.iterdir():
+        if minecraft_version_path_is_valid(minecraft_version_path):
+            return True
+
+    return False
+
+
 def get_default_minecraft_installation_directory_path() -> Path:
+    default_minecraft_installation_directory_path: Path = Path.home() / ".minecraft"
+
     system: str = platform.system()
     if system == "Windows":  # noqa: PLR2004
-        windows_minecraft_installation_directory_path: Path = (
-            Path(os.getenv("APPDATA")) / ".minecraft"
+        default_minecraft_installation_directory_path = (
+            Path(os.environ["APPDATA"]) / ".minecraft"
         )
-        if windows_minecraft_installation_directory_path.is_dir():
-            return windows_minecraft_installation_directory_path
 
-    if system == "Linux":  # noqa: PLR2004
-        linux_minecraft_installation_directory_path: Path = Path.home() / ".minecraft"
-        if linux_minecraft_installation_directory_path.is_dir():
-            return linux_minecraft_installation_directory_path
+    elif system == "Linux":  # noqa: PLR2004
+        if not default_minecraft_installation_directory_path.is_dir():
+            default_minecraft_installation_directory_path = (
+                Path.home() / ".var/app/com.mojang.Minecraft/.minecraft"
+            )
 
-        linux_minecraft_installation_directory_path = (
-            Path.home() / ".var/app/com.mojang.Minecraft/.minecraft"
-        )
-        if linux_minecraft_installation_directory_path.is_dir():
-            return linux_minecraft_installation_directory_path
-
-    if system == "Darwin":  # noqa: PLR2004
-        macos_minecraft_installation_directory_path: Path = (
+    elif system == "Darwin":  # noqa: PLR2004
+        default_minecraft_installation_directory_path = (
             Path.home() / "Library/Application Support/minecraft"
         )
-        if macos_minecraft_installation_directory_path.is_dir():
-            return macos_minecraft_installation_directory_path
 
-    INDETERMINABLE_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE: Final[str] = (
-        "MINECRAFT_INSTALLATION_DIRECTORY_PATH could not be determined, "
-        "because either Minecraft is not installable on your Operating System, "
-        "or no `.minecraft` directory exists."
+    DEFAULT_MINECRAFT_INSTALLATION_DIRECTORY_PATH_IS_VALID: Final[bool] = bool(
+        default_minecraft_installation_directory_path.is_dir()
+        and (default_minecraft_installation_directory_path / "assets").is_dir()
+        and (default_minecraft_installation_directory_path / "clientID.txt").is_file()
+        and all(
+            tag in identify_tags_from_path(
+                default_minecraft_installation_directory_path / "clientID.txt"
+            )
+            for tag
+            in ("file", "text", "plain-text")
+        )
+        and (
+            default_minecraft_installation_directory_path / "launcher_accounts.json"
+        ).is_file()
+        and all(
+            tag in identify_tags_from_path(
+                default_minecraft_installation_directory_path / "launcher_accounts.json"
+            )
+            for tag
+            in ("file", "text", "json")
+        )
+        and (default_minecraft_installation_directory_path / "options.txt").is_file()
+        and all(
+            tag in identify_tags_from_path(
+                default_minecraft_installation_directory_path / "options.txt"
+            )
+            for tag
+            in ("file", "text", "plain-text")
+        )
     )
-    raise OSError(INDETERMINABLE_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE)
+    if not DEFAULT_MINECRAFT_INSTALLATION_DIRECTORY_PATH_IS_VALID:
+        INDETERMINABLE_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE: Final[str] = (
+            "MINECRAFT_INSTALLATION_DIRECTORY_PATH could not be determined, "
+            "because either Minecraft is not installable on your Operating System, "
+            "or no `.minecraft` directory exists."
+        )
+        raise OSError(INDETERMINABLE_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE)
+
+    return default_minecraft_installation_directory_path
 
 
-def get_default_minecraft_version(minecraft_installation_directory_path: Path) -> str:
-    raise NotImplementedError  # TODO
+def get_default_minecraft_mods_installation_directory_path() -> Path:
+    default_minecraft_installation_directory_path: Path = (
+        get_default_minecraft_installation_directory_path()
+    )
+
+    default_minecraft_mods_installation_directory_path: Path = (
+        default_minecraft_installation_directory_path / "mods"
+    )
+
+    if not default_minecraft_mods_installation_directory_path.is_dir():
+        default_minecraft_mods_installation_directory_path.mkdir()
+
+    return default_minecraft_mods_installation_directory_path
+
+
+def get_default_minecraft_versions_directory_path() -> Path:
+    default_minecraft_installation_directory_path: Path = (
+        get_default_minecraft_installation_directory_path()
+    )
+
+    default_minecraft_versions_directory_path: Path = (
+        default_minecraft_installation_directory_path / "versions"
+    )
+
+    DEFAULT_MINECRAFT_VERSIONS_DIRECTORY_PATH_IS_VALID: Final[bool] = bool(
+        default_minecraft_versions_directory_path.is_dir()
+        and minecraft_versions_directory_path_contains_a_valid_version(
+            default_minecraft_versions_directory_path
+        )
+    )
+    if not DEFAULT_MINECRAFT_VERSIONS_DIRECTORY_PATH_IS_VALID:
+        INDETERMINABLE_MINECRAFT_VERSIONS_DIRECTORY_PATH_MESSAGE: Final[str] = (
+            "MINECRAFT_VERSIONS_DIRECTORY_PATH could not be determined, "
+            "because no valid `.minecraft/versions` directory exists."
+        )
+        raise OSError(INDETERMINABLE_MINECRAFT_VERSIONS_DIRECTORY_PATH_MESSAGE)
+
+    return default_minecraft_versions_directory_path
+
+
+def get_default_mod_loader(minecraft_version: str, minecraft_versions_directory_path: Path) -> ModLoader:
+    minecraft_version_path: Path
+    for minecraft_version_path in minecraft_versions_directory_path.iterdir():
+        compatible_mod_loader_found: bool = bool(
+            minecraft_version.removesuffix(".0") in minecraft_version_path.name
+            and minecraft_version_path_is_valid(minecraft_version_path)
+        )
+        if compatible_mod_loader_found:
+            if "fabric" in minecraft_version_path.name:
+                return ModLoader("FA")
+
+            if "forge" in minecraft_version_path.name:
+                return ModLoader("FO")
+
+            if "quilt" in minecraft_version_path.name:
+                return ModLoader("QU")
+
+    return ModLoader("FA")
+
+
+def get_latest_installed_minecraft_version(minecraft_versions_directory_path: Path) -> str:
+    latest_installed_minecraft_version: str | None = None
+
+    def next_version_is_latest(previous_version: str | None, next_version: str) -> bool:
+        if previous_version is None:
+            return True
+
+        split_previous_version: tuple[str, str, str] = tuple(  # type: ignore[assignment]
+            previous_version.split(".", maxsplit=2)
+        )
+        split_next_version: tuple[str, str, str] = tuple(  # type: ignore[assignment]
+            next_version.split(".", maxsplit=2)
+        )
+        previous_major: int = int(split_previous_version[0])
+        previous_minor: int = int(split_previous_version[1])
+        previous_bugfix: int = int(split_previous_version[2])
+        next_major: int = int(split_next_version[0])
+        next_minor: int = int(split_next_version[1])
+        next_bugfix: int = int(split_next_version[2])
+
+        if next_major != previous_major:
+            return next_major > previous_major
+
+        if next_minor != previous_minor:
+            return next_minor > previous_minor
+
+        return next_bugfix > previous_bugfix
+
+    minecraft_version_path: Path
+    for minecraft_version_path in minecraft_versions_directory_path.iterdir():
+        minecraft_version_path_is_modded: bool = bool(
+            "fabric" in minecraft_version_path.name.lower()
+            or "quilt" in minecraft_version_path.name.lower()
+            or "forge" in minecraft_version_path.name.lower()
+        )
+        if not minecraft_version_path_is_modded:
+            continue
+
+        current_minecraft_version: str = (
+            minecraft_version_path.name.split("-")[0]
+            if "forge" in minecraft_version_path.name.lower()
+            else minecraft_version_path.name.split("-")[-1]
+        )
+        minecraft_version_path_is_latest: bool = (
+            minecraft_version_path_is_valid(minecraft_version_path)
+            and next_version_is_latest(
+                latest_installed_minecraft_version,
+                (
+                    current_minecraft_version
+                    if current_minecraft_version.count(".") == 2
+                    else current_minecraft_version + ".0"
+                )
+            )
+        )
+        if minecraft_version_path_is_latest:
+            latest_installed_minecraft_version = current_minecraft_version
+
+    if latest_installed_minecraft_version is None:
+        INDETERMINABLE_LATEST_INSTALLED_MINECRAFT_VERSION_MESSAGE: Final[str] = (
+            "FILTER_MINECRAFT_VERSION could not be automatically determined, "
+            "because no versions are installed within your `.minecraft/versions` directory."
+        )
+        raise OSError(INDETERMINABLE_LATEST_INSTALLED_MINECRAFT_VERSION_MESSAGE)
+
+    return latest_installed_minecraft_version
 
 
 @final
@@ -116,12 +337,14 @@ class Settings:
 
     def __getattr__(self, item: str) -> Any:
         """Retrieve settings value by attribute lookup."""
-        self._setup_env_variables(
-            minecraft_installation_directory_path=None,
-            curseforge_api_key=None,
-            filter_minecraft_version=None,
-            filter_mod_loader=None
-        )
+        if not self._is_env_variables_setup:
+            self._setup_env_variables(
+                minecraft_mods_installation_directory_path=None,
+                minecraft_versions_directory_path=None,
+                curseforge_api_key=None,
+                filter_minecraft_version=None,
+                filter_mod_loader=None
+            )
 
         if item in self._settings:
             return self._settings[item]
@@ -192,68 +415,70 @@ class Settings:
                 format="%(levelname)s: %(message)s"
             )
 
-    def _setup_minecraft_installation_directory_path(self, *, minecraft_installation_directory_path: Path | None, force_env_variables: bool = False) -> None:  # noqa: E501
-        if minecraft_installation_directory_path is None or force_env_variables:
-            raw_minecraft_installation_directory_path: str = os.getenv(
-                "MINECRAFT_INSTALLATION_DIRECTORY_PATH",
+    def _setup_minecraft_mods_installation_directory_path(self, *, minecraft_mods_installation_directory_path: Path | None, force_env_variables: bool = False) -> None:  # noqa: E501
+        extra_invalid_minecraft_mods_installation_directory_path_message: str = ""
+
+        if minecraft_mods_installation_directory_path is None or force_env_variables:
+            raw_minecraft_mods_installation_directory_path: str = os.getenv(
+                "MINECRAFT_MODS_INSTALLATION_DIRECTORY_PATH",
                 ""
             )
 
-            minecraft_installation_directory_path = (
-                Path(
-                    raw_minecraft_installation_directory_path
-                )
-                if raw_minecraft_installation_directory_path or force_env_variables
-                else get_default_minecraft_installation_directory_path()
+            minecraft_mods_installation_directory_path = (
+                Path(raw_minecraft_mods_installation_directory_path)
+                if raw_minecraft_mods_installation_directory_path or force_env_variables
+                else get_default_minecraft_mods_installation_directory_path()
             )
 
-        def _identify_tags_from_path(path: Path) -> set[str]:
-            return identify.tags_from_path(path)  # type: ignore[arg-type]
+            if not raw_minecraft_mods_installation_directory_path and not force_env_variables:
+                extra_invalid_minecraft_mods_installation_directory_path_message = (
+                    " (run a modded Minecraft version at least once "
+                    "to create the `.minecraft/mods` directory)"
+                )
 
-        path_is_valid_minecraft_installation_directory: bool = bool(
-            minecraft_installation_directory_path.is_dir()
-            and (minecraft_installation_directory_path / "assets").is_dir()
-            and (minecraft_installation_directory_path / "clientID.txt").is_file()
-            and (
-                tag in _identify_tags_from_path(
-                    minecraft_installation_directory_path / "clientID.txt"
-                )
-                for tag
-                in ("file", "text", "plain-text")
-            )
-            and (minecraft_installation_directory_path / "launcher_accounts.json").is_file()
-            and (
-                tag in _identify_tags_from_path(
-                    minecraft_installation_directory_path / "launcher_accounts.json"
-                )
-                for tag
-                in ("file", "text", "json")
-            )
-            and (minecraft_installation_directory_path / "options.txt").is_file()
-            and (
-                tag in _identify_tags_from_path(
-                    minecraft_installation_directory_path / "options.txt"
-                )
-                for tag
-                in ("file", "text", "plain-text")
-            )
-        )
-
-        if not path_is_valid_minecraft_installation_directory:
-            INVALID_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE: Final[str] = (
-                "MINECRAFT_INSTALLATION_DIRECTORY_PATH must be a valid path "
-                "to your Minecraft installation directory."
-                "Provide the path to your Minecraft installation directory, "
-                "either via the `--minecraft-installation-directory-path` CLI argument, "
-                "or the MINECRAFT_INSTALLATION_DIRECTORY_PATH environment variable."
+        if not minecraft_mods_installation_directory_path.is_dir():
+            INVALID_MINECRAFT_MODS_INSTALLATION_DIRECTORY_PATH_MESSAGE: Final[str] = (
+                "MINECRAFT_MODS_INSTALLATION_DIRECTORY_PATH must be a valid path "
+                "to your Minecraft mods installation directory"
+                f"{extra_invalid_minecraft_mods_installation_directory_path_message}"
             )
             raise ImproperlyConfiguredError(
-                INVALID_MINECRAFT_INSTALLATION_DIRECTORY_PATH_MESSAGE
+                INVALID_MINECRAFT_MODS_INSTALLATION_DIRECTORY_PATH_MESSAGE
             )
 
-        self._settings["MINECRAFT_INSTALLATION_DIRECTORY_PATH"] = (
-            minecraft_installation_directory_path
+        self._settings["MINECRAFT_MODS_INSTALLATION_DIRECTORY_PATH"] = (
+            minecraft_mods_installation_directory_path
         )
+
+    def _setup_minecraft_versions_directory_path(self, *, minecraft_versions_directory_path: Path | None, force_env_variables: bool = False) -> None:  # noqa: E501
+        if minecraft_versions_directory_path is None or force_env_variables:
+            raw_minecraft_versions_directory_path: str = os.getenv(
+                "MINECRAFT_VERSIONS_DIRECTORY_PATH",
+                ""
+            )
+
+            minecraft_versions_directory_path = (
+                Path(raw_minecraft_versions_directory_path)
+                if raw_minecraft_versions_directory_path or force_env_variables
+                else get_default_minecraft_versions_directory_path()
+            )
+
+        MINECRAFT_VERSIONS_DIRECTORY_PATH_IS_VALID: Final[bool] = bool(
+            minecraft_versions_directory_path.is_dir()
+            and minecraft_versions_directory_path_contains_a_valid_version(
+                minecraft_versions_directory_path
+            )
+        )
+        if not MINECRAFT_VERSIONS_DIRECTORY_PATH_IS_VALID:
+            INVALID_MINECRAFT_VERSIONS_DIRECTORY_PATH_MESSAGE: Final[str] = (
+                "MINECRAFT_VERSIONS_DIRECTORY_PATH must be a valid path "
+                "to your Minecraft mods installation directory"
+            )
+            raise ImproperlyConfiguredError(
+                INVALID_MINECRAFT_VERSIONS_DIRECTORY_PATH_MESSAGE
+            )
+
+        self._settings["MINECRAFT_VERSIONS_DIRECTORY_PATH"] = minecraft_versions_directory_path
 
     def _setup_curseforge_api_key(self, *, curseforge_api_key: str | None, force_env_variables: bool = False) -> None:  # noqa: E501
         if curseforge_api_key is None or force_env_variables:
@@ -266,10 +491,7 @@ class Settings:
                 logging.warning(
                     "CURSEFORGE_API_KEY has not been provided. "
                     "If any mods need to be downloaded from CurseForge, "
-                    "they will fail to be downloaded. "
-                    "Provide your CurseForge API Key, "
-                    "either via the `--curseforge-api-key` CLI argument, "
-                    "or the CURSEFORGE_API_KEY environment variable."
+                    "they will fail to be downloaded"
                 )
 
                 self._settings["CURSEFORGE_API_KEY"] = None
@@ -281,13 +503,20 @@ class Settings:
             INVALID_CURSEFORGE_API_KEY_MESSAGE: Final[str] = (
                 "CURSEFORGE_API_KEY must be a valid CurseForge API Key "
                 "(see https://console.curseforge.com/?#/api-keys "
-                "for how to generate CurseForge API keys)."
+                "for how to generate CurseForge API keys)"
             )
             raise ImproperlyConfiguredError(INVALID_CURSEFORGE_API_KEY_MESSAGE)
 
         self._settings["CURSEFORGE_API_KEY"] = curseforge_api_key
 
     def _setup_filter_minecraft_version(self, *, filter_minecraft_version: str | None, force_env_variables: bool = False) -> None:  # noqa: E501
+        if "MINECRAFT_VERSIONS_DIRECTORY_PATH" not in self._settings:
+            INVALID_SETUP_ORDER_MESSAGE: Final[str] = (
+                "Invalid setup order: MINECRAFT_VERSIONS_DIRECTORY_PATH must be set up "
+                "before FILTER_MINECRAFT_VERSION is set up."
+            )
+            raise RuntimeError(INVALID_SETUP_ORDER_MESSAGE)
+
         if filter_minecraft_version is None or force_env_variables:
             raw_filter_minecraft_version: str = os.getenv(
                 "FILTER_MINECRAFT_VERSION",
@@ -297,20 +526,85 @@ class Settings:
             filter_minecraft_version = (
                 raw_filter_minecraft_version
                 if raw_filter_minecraft_version
-                else get_default_minecraft_version(
-                    self._settings["MINECRAFT_INSTALLATION_DIRECTORY_PATH"]  # type: ignore[arg-type]
+                else get_latest_installed_minecraft_version(
+                    minecraft_versions_directory_path=self._settings["MINECRAFT_VERSIONS_DIRECTORY_PATH"]  # type: ignore[arg-type]
                 )
             )
 
-        UnsanitisedMinecraftVersionValidator()(filter_minecraft_version)
-        MinLengthValidator(2)(filter_minecraft_version)
-        filter_minecraft_version_cleaner: BaseMod = object()  # type: ignore[assignment]
+        filter_minecraft_version_cleaner: BaseMod = BaseMod()
         filter_minecraft_version_cleaner.minecraft_version = filter_minecraft_version
-        filter_minecraft_version_cleaner.clean = BaseMod.clean
-        filter_minecraft_version_cleaner.sanitise_minecraft_version = BaseMod.sanitise_minecraft_version
-        filter_minecraft_version_cleaner.clean()
+
+        try:
+            UnsanitisedMinecraftVersionValidator()(filter_minecraft_version)
+            MinLengthValidator(2)(filter_minecraft_version)
+            filter_minecraft_version_cleaner.clean()
+        except ValidationError:
+            INVALID_FILTER_MINECRAFT_VERSION_MESSAGE: Final[str] = (
+                "FILTER_MINECRAFT_VERSION must be a valid Minecraft version "
+                "(see https://minecraft.wiki/w/Version_formats#Release "
+                "for an explanation about the Minecraft version format)"
+            )
+            raise ImproperlyConfiguredError(INVALID_FILTER_MINECRAFT_VERSION_MESSAGE) from None
+
+        filter_minecraft_version = filter_minecraft_version_cleaner.minecraft_version
+
+        MINECRAFT_VERSION_EXISTS: Final[bool] = any(
+            minecraft_version_path_is_valid(minecraft_version_path)
+            for minecraft_version_path
+            in self._settings["MINECRAFT_VERSIONS_DIRECTORY_PATH"].iterdir()  # type: ignore
+            if filter_minecraft_version.removesuffix(".0") in minecraft_version_path.name
+        )
+        if not MINECRAFT_VERSION_EXISTS:
+            FILTER_MINECRAFT_VERSION_NOT_INSTALLED_MESSAGE: Final[str] = (
+                "FILTER_MINECRAFT_VERSION must be a valid Minecraft version "
+                "that has already been installed "
+                "(to add mods to this minecraft version run Minecraft at the required version "
+                "at least once)"
+            )
+            raise ImproperlyConfiguredError(
+                FILTER_MINECRAFT_VERSION_NOT_INSTALLED_MESSAGE
+            ) from None
 
         self._settings["FILTER_MINECRAFT_VERSION"] = filter_minecraft_version
+
+    def _setup_filter_mod_loader(self, *, filter_mod_loader: ModLoader | None, force_env_variables: bool = False) -> None:  # noqa: E501
+        if filter_mod_loader is None or force_env_variables:
+            SETUP_ORDER_IS_INVALID: Final[bool] = bool(
+                "FILTER_MINECRAFT_VERSION" not in self._settings
+                or "MINECRAFT_VERSIONS_DIRECTORY_PATH" not in self._settings
+            )
+            if SETUP_ORDER_IS_INVALID:
+                INVALID_SETUP_ORDER_MESSAGE: Final[str] = (
+                    "Invalid setup order: "
+                    "FILTER_MINECRAFT_VERSION and MINECRAFT_VERSIONS_DIRECTORY_PATH "
+                    "must be set up before FILTER_MOD_LOADER is set up."
+                )
+                raise RuntimeError(INVALID_SETUP_ORDER_MESSAGE)
+
+            raw_filter_mod_loader: str = os.getenv(
+                "FILTER_MOD_LOADER",
+                ""
+            )
+
+            if raw_filter_mod_loader:
+                try:
+                    filter_mod_loader = ModLoader(raw_filter_mod_loader.upper()[:2])
+                except ValueError:
+                    INVALID_FILTER_MOD_LOADER_MESSAGE: Final[str] = (
+                        "FILTER_MOD_LOADER must be the name of a valid mod loader "
+                        "(one of \"Forge\", \"Fabric\" or \"Quilt\")."
+                    )
+                    raise ImproperlyConfiguredError(
+                        INVALID_FILTER_MOD_LOADER_MESSAGE
+                    ) from None
+
+            elif "FILTER_MINECRAFT_VERSION" in self._settings:
+                filter_mod_loader = get_default_mod_loader(
+                    minecraft_version=self._settings["FILTER_MINECRAFT_VERSION"],  # type: ignore[arg-type]
+                    minecraft_versions_directory_path=self._settings["MINECRAFT_VERSIONS_DIRECTORY_PATH"]  # type: ignore[arg-type]
+                )
+
+        self._settings["FILTER_MOD_LOADER"] = filter_mod_loader
 
     def _setup_env_variables(self, *, minecraft_mods_installation_directory_path: Path | None, minecraft_versions_directory_path: Path | None, curseforge_api_key: str | None, filter_minecraft_version: str | None, filter_mod_loader: ModLoader | None, dry_run: bool = False, force_env_variables: bool = False, verbosity: int = 1) -> None:  # noqa: E501
         """
@@ -319,46 +613,69 @@ class Settings:
         Environment values are loaded from the .env file/the current environment variables and
         are only stored after the input values have been validated.
         """
-        if not self._is_env_variables_setup:
-            dotenv.load_dotenv()
+        if self._is_env_variables_setup:
+            logging.warning("Environment variables have already been set up.")
+            return
 
-            self._setup_logging(verbosity=verbosity, force_env_variables=force_env_variables)
+        dotenv.load_dotenv()
 
-            self._setup_minecraft_installation_directory_path(
-                minecraft_installation_directory_path=minecraft_installation_directory_path,
-                force_env_variables=force_env_variables
-            )
+        self._setup_logging(verbosity=verbosity, force_env_variables=force_env_variables)
 
-            self._setup_curseforge_api_key(
-                curseforge_api_key=curseforge_api_key,
-                force_env_variables=force_env_variables
-            )
+        self._setup_minecraft_mods_installation_directory_path(
+            minecraft_mods_installation_directory_path=minecraft_mods_installation_directory_path,
+            force_env_variables=force_env_variables
+        )
 
-            self._settings["DRY_RUN"] = dry_run
+        self._setup_minecraft_versions_directory_path(
+            minecraft_versions_directory_path=minecraft_versions_directory_path,
+            force_env_variables=force_env_variables
+        )
 
-            self._is_env_variables_setup = True
+        self._setup_curseforge_api_key(
+            curseforge_api_key=curseforge_api_key,
+            force_env_variables=force_env_variables
+        )
+
+        self._setup_filter_minecraft_version(
+            filter_minecraft_version=filter_minecraft_version,
+            force_env_variables=force_env_variables
+        )
+
+        self._setup_filter_mod_loader(
+            filter_mod_loader=filter_mod_loader,
+            force_env_variables=force_env_variables
+        )
+
+        self._settings["DRY_RUN"] = dry_run
+
+        self._is_env_variables_setup = True
 
 
 settings: Final[Settings] = Settings()
 
 
-    """
-    Load environment values into the settings dictionary.
-
-    Environment values are loaded from the .env file/the current environment variables and
-    are only stored after the input values have been validated.
-    """
-    # noinspection PyProtectedMember
-    settings._setup_env_variables(  # noqa: SLF001
-        minecraft_installation_directory_path=minecraft_installation_directory_path,
-        curseforge_api_key=curseforge_api_key,
-        filter_minecraft_version=filter_minecraft_version,
-        filter_mod_loader=filter_mod_loader,
-        dry_run=dry_run,
-        force_env_variables=force_env_variables,
-        verbosity=verbosity
-    )
 def run_setup(*, minecraft_mods_installation_directory_path: Path, minecraft_versions_directory_path: Path, curseforge_api_key: str, filter_minecraft_version: str, filter_mod_loader: ModLoader, dry_run: bool, force_env_variables: bool, verbosity: int) -> None:  # noqa: E501
+    """Execute the setup functions required, before other modules can be run."""
+    with SuppressTraceback(verbosity):
+        with SuppressStdOutAndStdErr(verbosity):
+            # noinspection PyProtectedMember
+            settings._setup_env_variables(  # noqa: SLF001
+                minecraft_mods_installation_directory_path=minecraft_mods_installation_directory_path,
+                minecraft_versions_directory_path=minecraft_versions_directory_path,
+                curseforge_api_key=curseforge_api_key,
+                filter_minecraft_version=filter_minecraft_version,
+                filter_mod_loader=filter_mod_loader,
+                dry_run=dry_run,
+                force_env_variables=force_env_variables,
+                verbosity=verbosity
+            )
+
+        logging.debug("Begin database setup")
+
+        with SuppressStdOutAndStdErr(verbosity - 2):
+            management.call_command("migrate")
+
+        logging.debug("Database setup completed")
 
 
 IS_ENV_VARIABLES_SETUP: bool
