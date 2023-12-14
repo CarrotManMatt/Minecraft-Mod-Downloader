@@ -42,12 +42,7 @@ def get_default_mods_list_file_path() -> Path:
                         if mods_list_file_path.is_file():
                             return mods_list_file_path
 
-    MODS_LIST_FILE_NOT_PROVIDED_MESSAGE: Final[str] = (
-        "MODS_LIST_FILE has not been provided. "
-        "Please provide a valid mods-list file, "
-        "either via the `--mods-list-file` CLI argument, "
-        "or the MODS_LIST_FILE_PATH environment variable."
-    )
+    MODS_LIST_FILE_NOT_PROVIDED_MESSAGE: Final[str] = "MODS_LIST_FILE has not been provided"
     raise ConfigSettingRequiredError(MODS_LIST_FILE_NOT_PROVIDED_MESSAGE)
 
 
@@ -63,10 +58,7 @@ def setup_raw_mods_list(*, mods_list_file: TextIOWrapper | None, mods_list: str 
 
             if not mods_list_file_path.is_file():
                 INVALID_MODS_LIST_FILE_PATH_MESSAGE: Final[str] = (
-                    "MODS_LIST_FILE_PATH must be a valid path to your mods-list file."
-                    "Provide the path to your mods-list file, "
-                    "either via the `--mods-list-file` CLI argument, "
-                    "or the MODS_LIST_FILE_PATH environment variable."
+                    "MODS_LIST_FILE_PATH must be a valid path to your mods-list file"
                 )
                 raise ImproperlyConfiguredError(INVALID_MODS_LIST_FILE_PATH_MESSAGE)
 
@@ -114,4 +106,3 @@ def load_from_str(raw_mods_list: str) -> None:
         load_from_multi_depth_iterable(
             raw_mod_details.split(",") for raw_mod_details in raw_mods_list_collection
         )
-
