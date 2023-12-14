@@ -33,7 +33,7 @@ class SuppressTraceback:
 
     def __enter__(self) -> None:
         """Enter the context manager, suppressing the traceback output."""
-        if self.verbosity <= 1:
+        if self.verbosity <= 2:
             # noinspection SpellCheckingInspection
             sys.tracebacklimit = 0
 

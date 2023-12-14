@@ -145,27 +145,30 @@ def run(argv: Sequence[str] | None = None) -> int:
         if verbosity <= 1:
             verbosity = 1
 
-    with SuppressTraceback(verbosity):
-        with SuppressStdOutAndStdErr(verbosity):
-            config.setup_env_variables(
-                minecraft_installation_directory_path=parsed_args.minecraft_installation_directory_path,
-                curseforge_api_key=parsed_args.curseforge_api_key,
-                filter_minecraft_version=parsed_args.filter_minecraft_version,
-                filter_mod_loader=parsed_args.filter_mod_loader,
-                dry_run=parsed_args.dry_run,
-                force_env_variables=parsed_args.force_env_variables,
-                verbosity=verbosity
-            )
-            config.setup_django()
+    try:
+        config.run_setup(
+            minecraft_mods_installation_directory_path=parsed_args.minecraft_mods_installation_directory_path,
+            minecraft_versions_directory_path=parsed_args.minecraft_versions_directory_path,
+            curseforge_api_key=parsed_args.curseforge_api_key,
+            filter_minecraft_version=parsed_args.filter_minecraft_version,
+            filter_mod_loader=parsed_args.filter_mod_loader,
+            dry_run=parsed_args.dry_run,
+            force_env_variables=parsed_args.force_env_variables,
+            verbosity=verbosity
+        )
 
-        with SuppressStdOutAndStdErr(verbosity - 1):
-            management.call_command("migrate")
-
-        with SuppressStdOutAndStdErr(verbosity):
+        with SuppressTraceback(verbosity), SuppressStdOutAndStdErr(verbosity):
             parse_mods_list.setup_raw_mods_list(
                 mods_list_file=parsed_args.mods_list_file,
-                mods_list=",".join(parsed_args.mods_list),
-                force_env_variables=parsed_args.force_env_variables
+                mods_list=(
+                    ",".join(parsed_args.mods_list)
+                    if parsed_args.mods_list is not None
+                    else parsed_args.mods_list
+                ),
+                force_env_variables=parsed_args.force_env_variables,
             )
+    except (ImproperlyConfiguredError, ConfigSettingRequiredError) as e:
+        arg_parser.error(str(e))
+        return 2
 
     return 0

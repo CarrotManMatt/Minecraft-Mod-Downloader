@@ -13,6 +13,7 @@ import contextlib
 from contextlib import AbstractContextManager
 from io import StringIO
 from types import TracebackType
+from typing import Final
 
 
 class SuppressStdOutAndStdErr:
@@ -49,12 +50,12 @@ class SuppressStdOutAndStdErr:
 
     def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None) -> None:  # noqa: E501
         """Exit the context manager, restoring `std_out` & `std_err`."""
-        exception_was_raised: bool = bool(
+        EXCEPTION_WAS_RAISED: Final[bool] = bool(
             exc_type is not None
             or exc_val is not None
             or exc_tb is not None
         )
-        if self.verbosity < 0 and exception_was_raised:
+        if self.verbosity < 0 and EXCEPTION_WAS_RAISED:
             return
 
         if self._redirectors_were_entered:
