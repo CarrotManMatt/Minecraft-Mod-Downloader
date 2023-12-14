@@ -14,7 +14,11 @@ __all__: Sequence[str] = (
     "UnsanitisedMinecraftVersionValidator"
 )
 os.environ["DJANGO_SETTINGS_MODULE"] = "minecraft_mod_downloader.models._settings"
-django.setup()
+try:
+    django.setup()
+except RuntimeError as e:
+    if "populate() isn't reentrant" not in str(e):
+        raise
 
 # noinspection PyProtectedMember
 from minecraft_mod_downloader.models._mem_db_core.models import (
