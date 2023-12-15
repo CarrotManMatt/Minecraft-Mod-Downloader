@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Collection, Final, TypeAlias
 import logging
 
+from django.core import serializers
 from django.core.exceptions import ValidationError
 
 from minecraft_mod_downloader import config
@@ -144,8 +145,25 @@ def setup_raw_mods_list(*, mods_list_file: TextIOWrapper | None, mods_list: str 
 
 
 def load_from_iterable_of_mappings(raw_mods_list_collection: Iterable[Mapping[str, object]], *, known_minecraft_version: str | None = None, known_mod_loader: ModLoader | None = None) -> None:
-    mod_details: Mapping[str, object]
+    mod_details: Mapping[str, object] | str
     for mod_details in raw_mods_list_collection:
+        if isinstance(mod_details, str):
+            mod_details = mod_details.strip(", \t\n")
+            if "," not in mod_details:
+                load_from_single_depth_iterable(
+                    [mod_details],
+                    known_minecraft_version=known_minecraft_version,
+                    known_mod_loader=known_mod_loader
+                )
+                continue
+
+            load_from_multi_depth_iterable(
+                [mod_details],
+                known_minecraft_version=known_minecraft_version,
+                known_mod_loader=known_mod_loader
+            )
+            continue
+
         all_keys_are_valid: bool = bool(
             all(key in mod_details for key in REQUIRED_DETAILED_MOD_KEYS)
             and all(
@@ -327,8 +345,9 @@ def load_from_mapping(raw_mods_list_dict: Mapping[str, object], *, known_minecra
                 known_minecraft_version=known_minecraft_version,
                 known_mod_loader=known_mod_loader
             )
+            continue
 
-        elif isinstance(value, Sequence):
+        if isinstance(value, Sequence):
             is_array_of_strings: bool = all(
                 isinstance(inner_object, str)
                 for inner_object
@@ -345,19 +364,19 @@ def load_from_mapping(raw_mods_list_dict: Mapping[str, object], *, known_minecra
                     known_minecraft_version=known_minecraft_version,
                     known_mod_loader=known_mod_loader
                 )
+                continue
 
-            elif is_array_of_mappings:
+            if is_array_of_mappings:
                 load_from_iterable_of_mappings(
                     value,
                     known_minecraft_version=known_minecraft_version,
                     known_mod_loader=known_mod_loader
                 )
+                continue
 
-            else:
-                raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
-
-        else:
             raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
+
+        raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
 
 
 def load_from_single_depth_iterable(raw_mods_list_iterable: Iterable[str], *, known_minecraft_version: str | None = None, known_mod_loader: ModLoader | None = None) -> None:
@@ -632,6 +651,23 @@ def load_from_str(raw_mods_list: str, *, known_minecraft_version: str | None = N
                 )
             )
             if IS_ARRAY_OF_MAPPINGS:
+                IS_DATA_DUMP_MAPPING: Final[bool] = all(
+                    all(tag in inner_mapping for tag in ("model", "pk", "fields"))
+                    for inner_mapping
+                    in random.sample(
+                        raw_mods_list_mapping,
+                        (
+                            len(raw_mods_list_mapping) // 2
+                            if (len(raw_mods_list_mapping) // 2) > 0
+                            else 1
+                        )
+                    )
+                )
+                if IS_DATA_DUMP_MAPPING:
+                    for deserialized_object in serializers.deserialize("json", raw_mods_list):
+                        deserialized_object.save()
+                    return
+
                 load_from_iterable_of_mappings(
                     raw_mods_list_mapping,  # type: ignore[arg-type]
                     known_minecraft_version=known_minecraft_version,
