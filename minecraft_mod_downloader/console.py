@@ -103,6 +103,14 @@ def set_up_arg_parser() -> ArgumentParser:
     )
 
     arg_parser.add_argument(
+        "-F",
+        "--export",
+        help=(
+            "Re-export the imported mods-list as a new JSON file to the given file-path"
+        )
+    )
+
+    arg_parser.add_argument(
         "-D",
         "--dry-run",
         action="store_true",
