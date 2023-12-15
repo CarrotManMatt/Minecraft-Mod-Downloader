@@ -31,9 +31,9 @@ from minecraft_mod_downloader.models._mem_db_core.models.validators import (
     UnsanitisedMinecraftVersionValidator,
 )
 
-MAX_NAME_LENGTH: Final[int] = 30
+MAX_NAME_LENGTH: Final[int] = 65
 MAX_FILE_NAME_LENGTH: Final[int] = MAX_NAME_LENGTH
-MAX_VERSION_ID_LENGTH: Final[int] = 8
+MAX_VERSION_ID_LENGTH: Final[int] = 20
 MAX_MOD_ID_LENGTH: Final[int] = MAX_VERSION_ID_LENGTH
 
 
@@ -43,9 +43,9 @@ assert MAX_FILE_NAME_LENGTH >= MAX_NAME_LENGTH
 class ModLoader(models.TextChoices):
     """Enum of mod loader ID & display values of each mod loader."""
 
-    FORGE = "FO"
     FABRIC = "FA"
     QUILT = "QU"
+    FORGE = "FO"
 
 
 class BaseMod(BaseModel):
@@ -132,6 +132,8 @@ class BaseMod(BaseModel):
             except ValidationError as e:
                 raise ValidationError({"minecraft_version": e}, code="invalid") from e
 
+        super().clean()
+
 
 class SimpleMod(BaseMod):
     @property
@@ -193,7 +195,7 @@ class DetailedMod(BaseMod):
     name = models.CharField(
         _("Name"),
         max_length=MAX_NAME_LENGTH,
-        validators=[UniqueIdentifierValidator(), MinLengthValidator(2)],
+        validators=[MinLengthValidator(2)],
         blank=False,
         null=False,
         unique=True
@@ -253,6 +255,8 @@ class DetailedMod(BaseMod):
         if not FILE_NAME_IS_VALID:
             INVALID_FILE_NAME_MESSAGE: Final[str] = _("Invalid file name")
             raise ValidationError(INVALID_FILE_NAME_MESSAGE)
+
+        super().clean()
 
     def __str__(self) -> str:
         return f"{self.name} ({self.file_name})"

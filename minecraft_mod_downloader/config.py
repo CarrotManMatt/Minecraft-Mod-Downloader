@@ -78,8 +78,8 @@ def minecraft_version_path_is_valid(minecraft_version_path: Path) -> bool:
         and (
             (
                 (
-                    "fabric" in minecraft_version_path.name
-                    or "quilt" in minecraft_version_path.name
+                    "FA" in minecraft_version_path.name.upper()
+                    or "QU" in minecraft_version_path.name.upper()
                 )
                 and minecraft_version_name_is_regex_valid(
                     minecraft_version_path.name.split("-")[-1]
@@ -93,7 +93,7 @@ def minecraft_version_path_is_valid(minecraft_version_path: Path) -> bool:
                 ) <= 9
             )
             or (
-                "forge" in minecraft_version_path.name
+                "FO" in minecraft_version_path.name.upper()
                 and minecraft_version_name_is_regex_valid(
                     minecraft_version_path.name.split("-")[0]
                     if minecraft_version_path.name.split("-")[0].count(".") == 2
@@ -228,14 +228,14 @@ def get_default_minecraft_versions_directory_path() -> Path:
 
 
 def get_mod_loader_from_filename(filename: str) -> ModLoader | None:
-    if "fabric" in filename.lower():
+    if "FA" in filename.upper():
         return ModLoader.FABRIC
 
-    if "forge" in filename.lower():
-        return ModLoader.FORGE
-
-    if "quilt" in filename.lower():
+    if "QU" in filename.upper():
         return ModLoader.QUILT
+
+    if "FO" in filename.upper():
+        return ModLoader.FORGE
 
     return None
 
@@ -288,16 +288,16 @@ def get_latest_installed_minecraft_version(minecraft_versions_directory_path: Pa
     minecraft_version_path: Path
     for minecraft_version_path in minecraft_versions_directory_path.iterdir():
         minecraft_version_path_is_modded: bool = bool(
-            "fabric" in minecraft_version_path.name.lower()
-            or "quilt" in minecraft_version_path.name.lower()
-            or "forge" in minecraft_version_path.name.lower()
+            "FA" in minecraft_version_path.name.upper()
+            or "QU" in minecraft_version_path.name.upper()
+            or "FO" in minecraft_version_path.name.upper()
         )
         if not minecraft_version_path_is_modded:
             continue
 
         current_minecraft_version: str = (
             minecraft_version_path.name.split("-")[0]
-            if "forge" in minecraft_version_path.name.lower()
+            if "FO" in minecraft_version_path.name.upper()
             else minecraft_version_path.name.split("-")[-1]
         )
         minecraft_version_path_is_latest: bool = (

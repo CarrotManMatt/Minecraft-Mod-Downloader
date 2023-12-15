@@ -192,4 +192,6 @@ def run(argv: Sequence[str] | None = None) -> int:
         arg_parser.error(str(e))
         return 2
 
+    # TODO: output re-export file
+
     return 0
