@@ -14,7 +14,7 @@ __all__: Sequence[str] = (
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Final
+from typing import Final
 
 import pathvalidate
 from django.core.exceptions import ValidationError
@@ -142,7 +142,7 @@ class SimpleMod(BaseMod):
     def identifier(self, identifier: str) -> None:
         self._unique_identifier = identifier
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
 
         unique_identifier_field: models.Field = self._meta.get_field("_unique_identifier")
@@ -185,7 +185,7 @@ class ModTag(BaseModel):
     class Meta:
         verbose_name = _("Mod Tag")
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
 
         unique_identifier_field: models.Field = self._meta.get_field("_unique_identifier")

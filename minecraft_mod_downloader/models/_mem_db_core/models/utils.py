@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 __all__: Sequence[str] = ("BaseModel",)
 
-from typing import Any, Final
+from typing import Final
 
 from django.core.exceptions import FieldDoesNotExist
 from django.db.models import Model
@@ -23,7 +23,7 @@ class BaseModel(Model):
 
         abstract = True
 
-    def save(self, *args: Any, **kwargs: Any) -> None:
+    def save(self, *args: object, **kwargs: object) -> None:
         """
         Save the current instance to the database, only after the model has been cleaned.
 
@@ -34,9 +34,9 @@ class BaseModel(Model):
 
         super().save(*args, **kwargs)
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: object, **kwargs: object) -> None:
         """Initialize a new model instance, capturing any proxy field values."""
-        proxy_fields: dict[str, Any] = {
+        proxy_fields: dict[str, object] = {
             field_name: kwargs.pop(field_name)
             for field_name
             in set(kwargs.keys()) & self.get_proxy_field_names()
@@ -45,11 +45,11 @@ class BaseModel(Model):
         super().__init__(*args, **kwargs)
 
         field_name: str
-        value: Any
+        value: object
         for field_name, value in proxy_fields.items():
             setattr(self, field_name, value)
 
-    def update(self, *, commit: bool = True, using: str | None = None, **kwargs: Any) -> None:
+    def update(self, *, commit: bool = True, using: str | None = None, **kwargs: object) -> None:
         """
         Change an in-memory object's values, then save it to the database.
 
@@ -73,7 +73,7 @@ class BaseModel(Model):
             )
             raise TypeError(UNEXPECTED_KWARGS_MESSAGE)
 
-        value: Any
+        value: object
         for field_name, value in kwargs.items():
             setattr(self, field_name, value)
 

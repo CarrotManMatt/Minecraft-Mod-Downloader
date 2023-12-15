@@ -17,7 +17,7 @@ from collections.abc import Iterable, Mapping
 import json
 from io import TextIOWrapper
 from pathlib import Path
-from typing import Final, Any
+from typing import Final
 
 from django.core.exceptions import ValidationError
 
@@ -122,7 +122,7 @@ def setup_raw_mods_list(*, mods_list_file: TextIOWrapper | None, mods_list: str 
     )
 
 
-def load_from_mapping(raw_mods_list_dict: Mapping[str, Any]) -> None:
+def load_from_mapping(raw_mods_list_dict: Mapping[str, object], *, known_minecraft_version: str | None = None, known_mod_loader: ModLoader | None = None) -> None:
     raise NotImplementedError()  # TODO
 
 
@@ -298,11 +298,15 @@ def load_from_multi_depth_iterable(raw_mods_list_iterable: Iterable[str], *, kno
 
 def load_from_str(raw_mods_list: str, *, known_minecraft_version: str | None = None, known_mod_loader: ModLoader | None = None) -> None:
     try:
-        raw_mods_list_mapping: Mapping[str, Any] = json.loads(raw_mods_list)
+        raw_mods_list_mapping: Mapping[str, object] = json.loads(raw_mods_list)
     except json.JSONDecodeError:
         pass
     else:
-        load_from_mapping(raw_mods_list_mapping)
+        load_from_mapping(
+            raw_mods_list_mapping,
+            known_minecraft_version=known_minecraft_version,
+            known_mod_loader=known_mod_loader
+        )
 
     raw_mods_list_collection: Sequence[str] = raw_mods_list.splitlines()
 
