@@ -6,7 +6,8 @@ __all__: Sequence[str] = (
     "BaseError",
     "ConfigSettingRequiredError",
     "ImproperlyConfiguredError",
-    "ModListEntryLoadError"
+    "ModListEntryLoadError",
+    "ModTagLoadError"
 )
 
 import abc
@@ -109,5 +110,59 @@ class ModListEntryLoadError(BaseError, Exception):
                 if reason:
                     reason += " & "
                 reason += f"{field_name} was invalid"
+
+        return reason
+
+
+class ModTagLoadError(ModListEntryLoadError):
+    """Exception class for when a given mod-tag could not be correctly loaded."""
+
+    DEFAULT_MESSAGE: str = "One of the mod-tag entries could not be correctly loaded."
+
+    def __init__(self, message: str | None = None, name: str | None = None, mod_unique_identifier: str | None = None, reason: str | ValidationError | None = None) -> None:  # noqa: E501
+        """
+        Create a new ModTagLoadError with the given `name`.
+
+        The mod's `unique_identifier` that this tag is associated can also be given.
+        """
+        self.name: str | None = name
+        self.reason: str | None = (
+            self.format_reason(reason) if isinstance(reason, ValidationError) else reason
+        )
+
+        super().__init__(
+            message,
+            mod_unique_identifier,
+            self.reason if "tag" in self.reason else f"tag was invalid: {self.reason}"
+        )
+
+    @staticmethod
+    def format_reason(validation_error: ValidationError) -> str:
+        reason: str = ""
+
+        field_name: str
+        field_errors: Iterable[str]
+        for field_name, field_errors in validation_error:
+            field_name = field_name.replace("_", " ").strip().replace(
+                "minecraft",
+                "Minecraft"
+            )
+
+            blank_is_error: bool = any(
+                "cannot be blank" in field_error.lower() for field_error in field_errors
+            )
+            if blank_is_error:
+                if reason:
+                    reason += " & "
+                reason += f"tag {field_name} cannot be blank"
+
+            invalid_is_error: bool = bool(
+                any("invalid" in field_error.lower() for field_error in field_errors)
+                or any("not valid" in field_error.lower() for field_error in field_errors)
+            )
+            if invalid_is_error:
+                if reason:
+                    reason += " & "
+                reason += f"tag {field_name} was invalid"
 
         return reason

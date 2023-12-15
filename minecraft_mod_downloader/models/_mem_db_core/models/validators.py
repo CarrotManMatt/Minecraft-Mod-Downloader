@@ -60,7 +60,7 @@ class ShortIDValidator(RegexValidator):
 
 @deconstructible
 class TagNameValidator(RegexValidator):
-    TAG_NAME_RE: str = r"\A[a-z]{2,}\Z"
+    TAG_NAME_RE: str = r"\A[a-z](?:(?!\-{2})[a-z\-])*[a-z]\Z"
 
     message: str = _("Invalid name")
     regex: re.Pattern[str] = re.compile(TAG_NAME_RE)

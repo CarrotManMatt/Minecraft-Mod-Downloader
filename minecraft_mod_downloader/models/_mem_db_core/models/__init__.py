@@ -185,18 +185,6 @@ class ModTag(BaseModel):
     class Meta:
         verbose_name = _("Mod Tag")
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
-        super().__init__(*args, **kwargs)
-
-        unique_identifier_field: models.Field = self._meta.get_field("_unique_identifier")
-
-        validator: Callable[[object], None]
-        for validator in unique_identifier_field.validators:
-            if isinstance(validator, UniqueIdentifierValidator):
-                validator.message = "Invalid file name"
-
-        unique_identifier_field.verbose_name = _("File Name")
-
     def __str__(self) -> str:
         return self.name
 
@@ -244,6 +232,18 @@ class DetailedMod(BaseMod):
                 name="unique_name_per_unique_identifier"
             )
         ]
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+
+        unique_identifier_field: models.Field = self._meta.get_field("_unique_identifier")
+
+        validator: Callable[[object], None]
+        for validator in unique_identifier_field.validators:
+            if isinstance(validator, UniqueIdentifierValidator):
+                validator.message = "Invalid file name"
+
+        unique_identifier_field.verbose_name = _("File Name")
 
     def clean(self) -> None:
         FILE_NAME_IS_VALID: Final[bool] = bool(

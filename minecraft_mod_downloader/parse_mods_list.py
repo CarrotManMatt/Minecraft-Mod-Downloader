@@ -23,8 +23,8 @@ from django.core.exceptions import ValidationError
 
 from minecraft_mod_downloader import config
 from minecraft_mod_downloader.config import FALSE_VALUES, TRUE_VALUES, settings
-from minecraft_mod_downloader.exceptions import ConfigSettingRequiredError, ImproperlyConfiguredError, ModListEntryLoadError
-from minecraft_mod_downloader.models import APISourceMod, ModLoader, SimpleMod, UnsanitisedMinecraftVersionValidator, CustomSourceMod, DetailedMod
+from minecraft_mod_downloader.exceptions import ConfigSettingRequiredError, ImproperlyConfiguredError, ModListEntryLoadError, ModTagLoadError
+from minecraft_mod_downloader.models import APISourceMod, ModLoader, ModTag, SimpleMod, UnsanitisedMinecraftVersionValidator, CustomSourceMod, DetailedMod
 
 
 def get_default_mods_list_file_path() -> Path:
@@ -227,14 +227,14 @@ def load_from_multi_depth_iterable(raw_mods_list_iterable: Iterable[str], *, kno
         raw_mod_details = raw_mod_details.strip(", \n\t").replace("'", "\"")
 
         raw_mod_details_collection: list[str]
-        raw_tags: str
+        raw_tags: set[str]
         if raw_mod_details.count("\"") == 0:
             raw_mod_details_collection = raw_mod_details.split(",")
-            raw_tags = raw_mod_details_collection.pop(3)
+            raw_tags = set(raw_mod_details_collection.pop(3).strip(", \t\n").split(","))
 
         elif raw_mod_details.count("\"") == 2:
             escaped_raw_mod_details: list[str] = raw_mod_details.split("\"", maxsplit=2)
-            raw_tags = escaped_raw_mod_details[1].strip(",")
+            raw_tags = set(escaped_raw_mod_details[1].strip(", \t\n").split(","))
 
             speech_marks_usage_is_correct: bool = bool(
                 escaped_raw_mod_details[0].endswith(",")
@@ -244,8 +244,8 @@ def load_from_multi_depth_iterable(raw_mods_list_iterable: Iterable[str], *, kno
                 raise ValueError("Incorrect usage of speech marks in mods-list")
 
             raw_mod_details_collection = (
-                escaped_raw_mod_details[0].split(",")
-                + escaped_raw_mod_details[2].split(",")
+                escaped_raw_mod_details[0].strip(", \t\n").split(",")
+                + escaped_raw_mod_details[2].strip(", \t\n").split(",")
             )
 
         else:
@@ -288,7 +288,37 @@ def load_from_multi_depth_iterable(raw_mods_list_iterable: Iterable[str], *, kno
                 known_mod_loader=known_mod_loader
             )
 
-        # TODO add tags to `created_mod`
+        tag: str
+        for tag in raw_tags:
+            tag = tag.lower().strip(", \t\n").replace("_", "-").replace(
+                " ",
+                "-"
+            )
+
+            if not tag:
+                continue
+
+            created_mod_tag: ModTag
+            mod_tag_was_created: bool
+            try:
+                created_mod_tag, mod_tag_was_created = ModTag.objects.get_or_create(name=tag)
+            except ValidationError as e:
+                raise ModTagLoadError(
+                    name=tag,
+                    mod_unique_identifier=raw_mod_details_collection[1].strip(),
+                    reason=e
+                ) from None
+
+            if mod_tag_was_created:
+                logging.debug(f"Successfully created mod-tag object: {created_mod_tag!r}")
+            else:
+                logging.debug(f"Retrieved {created_mod_tag!r} (already existed)")
+
+            created_mod.tags.add(created_mod_tag)
+            logging.debug(
+                f"Successfully added mod-tag object: {created_mod_tag!r} "
+                f"to currently loaded mod object: {created_mod!r}"
+            )
 
         if mod_was_created:
             logging.debug(f"Successfully created mod object: {created_mod!r}")
