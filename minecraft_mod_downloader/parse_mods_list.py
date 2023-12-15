@@ -1,4 +1,3 @@
-import logging
 from collections.abc import Sequence
 
 __all__: Sequence[str] = (
@@ -17,7 +16,8 @@ from collections.abc import Iterable, Mapping
 import json
 from io import TextIOWrapper
 from pathlib import Path
-from typing import Final
+from typing import Collection, Final, TypeAlias
+import logging
 
 from django.core.exceptions import ValidationError
 
@@ -25,6 +25,20 @@ from minecraft_mod_downloader import config
 from minecraft_mod_downloader.config import FALSE_VALUES, TRUE_VALUES, settings
 from minecraft_mod_downloader.exceptions import ConfigSettingRequiredError, ImproperlyConfiguredError, ModListEntryLoadError, ModTagLoadError
 from minecraft_mod_downloader.models import APISourceMod, ModLoader, ModTag, SimpleMod, UnsanitisedMinecraftVersionValidator, CustomSourceMod, DetailedMod
+
+
+JsonOutput: TypeAlias = dict[str, object] | float | int | str | list[object] | bool | None
+
+EMPTY_MODS_LIST_MESSAGE: Final[str] = "Empty mods list."
+INVALID_MODS_LIST_MAPPING_MESSAGE: Final[str] = (
+    "Mods-list could not be parsed: empty/invalid input"
+)
+REQUIRED_DETAILED_MOD_KEYS: Iterable[str] = (
+    "name",
+    "file_name",
+    "version_id",
+    "download_source"
+)
 
 
 def get_default_mods_list_file_path() -> Path:
@@ -53,15 +67,22 @@ def get_default_mods_list_file_path() -> Path:
 
 
 def get_minecraft_version_from_filename(filename: str) -> str | None:
-    minecraft_version_regex: re.Match[str] | None = re.match(
+    main_minecraft_versions: Collection[str] = re.findall(
+        f"{r"\A"}.*mc(?P<minecraft_version>{UnsanitisedMinecraftVersionValidator.UNSANITISED_MINECRAFT_VERSION_RE.strip(r"\AZ")}).*{r"\Z"}",
+        filename
+    )
+    backup_minecraft_versions: Collection[str] = re.findall(
         f"{r"\A"}.*(?P<minecraft_version>{UnsanitisedMinecraftVersionValidator.UNSANITISED_MINECRAFT_VERSION_RE.strip(r"\AZ")}).*{r"\Z"}",
         filename
     )
 
-    if minecraft_version_regex is None:
-        return None
+    if not main_minecraft_versions:
+        if not backup_minecraft_versions:
+            return None
 
-    return minecraft_version_regex.group("minecraft_version")
+        return next(iter(backup_minecraft_versions))
+
+    return next(iter(main_minecraft_versions))
 
 
 def setup_raw_mods_list(*, mods_list_file: TextIOWrapper | None, mods_list: str | None, force_env_variables: bool = False) -> None:  # noqa: E501
@@ -122,8 +143,221 @@ def setup_raw_mods_list(*, mods_list_file: TextIOWrapper | None, mods_list: str 
     )
 
 
+def load_from_iterable_of_mappings(raw_mods_list_collection: Iterable[Mapping[str, object]], *, known_minecraft_version: str | None = None, known_mod_loader: ModLoader | None = None) -> None:
+    mod_details: Mapping[str, object]
+    for mod_details in raw_mods_list_collection:
+        all_keys_are_valid: bool = bool(
+            all(key in mod_details for key in REQUIRED_DETAILED_MOD_KEYS)
+            and all(
+                isinstance(mod_details.get(key, ""), str)
+                for key
+                in set(REQUIRED_DETAILED_MOD_KEYS) | {"download_source"}
+            )
+        )
+        if not all_keys_are_valid:
+            raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
+
+        if "minecraft_version" in mod_details:
+            if not isinstance(mod_details["minecraft_version"], str):
+                raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
+
+            if mod_details["minecraft_version"]:
+                known_minecraft_version = mod_details["minecraft_version"]
+
+        if "mod_loader" in mod_details:
+            if not isinstance(mod_details["mod_loader"], str):
+                raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
+
+            if mod_details["mod_loader"]:
+                known_mod_loader = mod_details["mod_loader"]
+
+        instance_defaults: dict[str, object] = {
+            "name": mod_details["name"],
+            "version_id": mod_details["version_id"]
+        }
+
+        ModClass: type[DetailedMod]
+        download_source_is_curseforge: bool = bool(
+            mod_details["download_source"] == "CF"
+            or (
+                mod_details["download_source"].replace(" ", "").replace("-", "").replace(
+                    "_",
+                    ""
+                ).lower().strip() == "curseforge"
+            )
+        )
+        download_source_is_modrinth: bool = bool(
+            mod_details["download_source"] == "MR"
+            or (
+                mod_details["download_source"].replace(" ", "").replace("-", "").replace(
+                    "_",
+                    ""
+                ).lower().strip() == "modrinth"
+            )
+        )
+        if download_source_is_curseforge:
+            ModClass = APISourceMod
+            api_mod_id_is_valid: bool = bool(
+                "api_mod_id" in mod_details
+                and isinstance(mod_details["api_mod_id"], str)
+            )
+            if not api_mod_id_is_valid:
+                raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
+            instance_defaults.update(
+                {
+                    "api_source": APISourceMod.APISource.CURSEFORGE,
+                    "api_mod_id": mod_details["api_mod_id"].strip()
+                }
+            )
+        elif download_source_is_modrinth:
+            ModClass = APISourceMod
+            api_mod_id_is_valid: bool = bool(
+                "api_mod_id" in mod_details
+                and isinstance(mod_details["api_mod_id"], str)
+            )
+            if not api_mod_id_is_valid:
+                raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
+            instance_defaults.update(
+                {
+                    "api_source": APISourceMod.APISource.MODRINTH,
+                    "api_mod_id": mod_details["api_mod_id"].strip()
+                }
+            )
+        else:
+            ModClass = CustomSourceMod
+            instance_defaults["download_url"] = mod_details["download_source"].strip()
+
+        if "disabled" in mod_details:
+            if not isinstance(mod_details["disabled"], bool):
+                raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
+            instance_defaults["disabled"] = mod_details["disabled"]
+
+        if "tags" in mod_details:
+            if not isinstance(mod_details["tags"], Iterable):
+                raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
+
+            tag_type_checking: object
+            for tag_type_checking in mod_details["tags"]:
+                if not isinstance(tag_type_checking, str):
+                    raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
+
+        created_mod: DetailedMod
+        mod_was_created: bool
+        e: ValidationError
+        try:
+            created_mod, mod_was_created = ModClass.objects.get_or_create(
+                minecraft_version=(
+                    known_minecraft_version
+                    if known_minecraft_version
+                    else settings["FILTER_MINECRAFT_VERSION"]
+                ),
+                mod_loader=(
+                    known_mod_loader
+                    if known_mod_loader
+                    else settings["FILTER_MOD_LOADER"]
+                ),
+                _unique_identifier=mod_details["file_name"].strip(),
+                defaults=instance_defaults
+            )
+        except ValidationError as e:
+            raise ModListEntryLoadError(
+                unique_identifier=mod_details["file_name"].strip(),
+                reason=e
+            ) from None
+
+        if "tags" in mod_details:
+            tag: str
+            for tag in mod_details["tags"]:
+                tag = tag.lower().strip(", \t\n").replace("_", "-").replace(
+                    " ", "-"
+                )
+
+                if not tag:
+                    continue
+
+                created_mod_tag: ModTag
+                mod_tag_was_created: bool
+                try:
+                    created_mod_tag, mod_tag_was_created = ModTag.objects.get_or_create(
+                        name=tag
+                    )
+                except ValidationError as e:
+                    raise ModTagLoadError(
+                        name=tag,
+                        mod_unique_identifier=mod_details["file_name"].strip(),
+                        reason=e
+                    ) from None
+
+                if mod_tag_was_created:
+                    logging.debug(f"Successfully created mod-tag object: {created_mod_tag!r}")
+                else:
+                    logging.debug(f"Retrieved {created_mod_tag!r} (already existed)")
+
+                created_mod.tags.add(created_mod_tag)
+                logging.debug(
+                    f"Successfully added mod-tag object: {created_mod_tag!r} "
+                    f"to currently loaded mod object: {created_mod!r}"
+                )
+
+        if mod_was_created:
+            logging.debug(f"Successfully created mod object: {created_mod!r}")
+        else:
+            logging.debug(f"Retrieved {created_mod!r} (already existed)")
+
+
 def load_from_mapping(raw_mods_list_dict: Mapping[str, object], *, known_minecraft_version: str | None = None, known_mod_loader: ModLoader | None = None) -> None:
-    raise NotImplementedError()  # TODO
+    if all(key in raw_mods_list_dict for key in REQUIRED_DETAILED_MOD_KEYS):
+        load_from_iterable_of_mappings(raw_mods_list_collection=(raw_mods_list_dict,))
+        return
+
+    key: str
+    value: object
+    for key, value in raw_mods_list_dict.items():
+        key_minecraft_version: str | None = get_minecraft_version_from_filename(key)
+        if key_minecraft_version:
+            known_minecraft_version = key_minecraft_version
+
+        key_mod_loader: ModLoader | None = config.get_mod_loader_from_filename(key)
+        if key_mod_loader:
+            known_mod_loader = key_mod_loader
+
+        if isinstance(value, Mapping):
+            load_from_mapping(
+                value,
+                known_minecraft_version=known_minecraft_version,
+                known_mod_loader=known_mod_loader
+            )
+
+        elif isinstance(value, Sequence):
+            is_array_of_strings: bool = all(
+                isinstance(inner_object, str)
+                for inner_object
+                in random.sample(value, (len(value) // 2) if (len(value) // 2) > 0 else 1)
+            )
+            is_array_of_mappings: bool = all(
+                isinstance(inner_object, Mapping)
+                for inner_object
+                in random.sample(value, (len(value) // 2) if (len(value) // 2) > 0 else 1)
+            )
+            if is_array_of_strings:
+                load_from_single_depth_iterable(
+                    value,
+                    known_minecraft_version=known_minecraft_version,
+                    known_mod_loader=known_mod_loader
+                )
+
+            elif is_array_of_mappings:
+                load_from_iterable_of_mappings(
+                    value,
+                    known_minecraft_version=known_minecraft_version,
+                    known_mod_loader=known_mod_loader
+                )
+
+            else:
+                raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
+
+        else:
+            raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
 
 
 def load_from_single_depth_iterable(raw_mods_list_iterable: Iterable[str], *, known_minecraft_version: str | None = None, known_mod_loader: ModLoader | None = None) -> None:
@@ -132,6 +366,7 @@ def load_from_single_depth_iterable(raw_mods_list_iterable: Iterable[str], *, kn
         if not raw_identifier:
             continue
 
+        e: ValidationError
         try:
             created_mod: SimpleMod
             mod_was_created: bool
@@ -168,6 +403,18 @@ def _load_single_mod_from_partial_collection(raw_mod_details_collection: list[st
 
     disabled_value_needs_error_showing: bool = False
 
+    file_name_minecraft_version: str | None = get_minecraft_version_from_filename(
+        raw_mod_details_collection[1].strip()
+    )
+    if file_name_minecraft_version:
+        known_minecraft_version = file_name_minecraft_version
+
+    file_name_mod_loader: str | None = config.get_mod_loader_from_filename(
+        raw_mod_details_collection[1].strip()
+    )
+    if file_name_mod_loader:
+        known_mod_loader = file_name_mod_loader
+
     ModClass: type[DetailedMod]
     if isinstance(download_source, APISourceMod.APISource):
         ModClass = APISourceMod
@@ -184,6 +431,14 @@ def _load_single_mod_from_partial_collection(raw_mod_details_collection: list[st
                 instance_defaults["disabled"] = (
                     raw_mod_details_collection[4].strip() in TRUE_VALUES
                 )
+                if len(raw_mod_details_collection) > 5:
+                    known_minecraft_version = raw_mod_details_collection[5].strip()
+
+                if len(raw_mod_details_collection) > 6:
+                    known_mod_loader = ModLoader(
+                        raw_mod_details_collection[6].strip().upper()[:2]
+                    )
+
     else:
         ModClass = CustomSourceMod
         instance_defaults["download_url"] = download_source
@@ -194,6 +449,13 @@ def _load_single_mod_from_partial_collection(raw_mod_details_collection: list[st
                 instance_defaults["disabled"] = (
                     raw_mod_details_collection[3].strip() in TRUE_VALUES
                 )
+                if len(raw_mod_details_collection) > 4:
+                    known_minecraft_version = raw_mod_details_collection[4].strip()
+
+                if len(raw_mod_details_collection) > 5:
+                    known_mod_loader = ModLoader(
+                        raw_mod_details_collection[5].strip().upper()[:2]
+                    )
 
     if disabled_value_needs_error_showing:
         raise ValueError(f"Invalid value for {"disabled"!r} flag, must be a boolean value")
@@ -251,7 +513,7 @@ def load_from_multi_depth_iterable(raw_mods_list_iterable: Iterable[str], *, kno
         else:
             raise ValueError("Incorrect usage of speech marks in mods-list")
 
-        if len(raw_mod_details_collection) > 6:
+        if len(raw_mod_details_collection) > 8:
             raise ValueError("Too many values supplied for a single mod's details")
 
         created_mod: DetailedMod
@@ -259,7 +521,7 @@ def load_from_multi_depth_iterable(raw_mods_list_iterable: Iterable[str], *, kno
 
         api_source_is_curseforge: bool = bool(
             "curse" in raw_mod_details_collection[3].lower()
-            or "forge" in raw_mod_details_collection[3].lower()
+            or "FO" in raw_mod_details_collection[3].upper()
         )
         if api_source_is_curseforge:
             raw_mod_details_collection.pop(3)
@@ -327,22 +589,106 @@ def load_from_multi_depth_iterable(raw_mods_list_iterable: Iterable[str], *, kno
 
 
 def load_from_str(raw_mods_list: str, *, known_minecraft_version: str | None = None, known_mod_loader: ModLoader | None = None) -> None:
-    try:
-        raw_mods_list_mapping: Mapping[str, object] = json.loads(raw_mods_list)
-    except json.JSONDecodeError:
-        pass
-    else:
-        load_from_mapping(
-            raw_mods_list_mapping,
-            known_minecraft_version=known_minecraft_version,
-            known_mod_loader=known_mod_loader
-        )
+    raw_mods_list_collection: Sequence[str]
 
-    raw_mods_list_collection: Sequence[str] = raw_mods_list.splitlines()
+    try:
+        raw_mods_list_mapping: JsonOutput = json.loads(raw_mods_list)
+    except json.JSONDecodeError:
+        raw_mods_list_collection = raw_mods_list.splitlines()
+    else:
+        if not raw_mods_list_mapping:
+            raise ValueError(EMPTY_MODS_LIST_MESSAGE)
+
+        if isinstance(raw_mods_list_mapping, float | int | bool | None):
+            raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
+
+        if isinstance(raw_mods_list_mapping, Mapping):
+            load_from_mapping(
+                raw_mods_list_mapping,
+                known_minecraft_version=known_minecraft_version,
+                known_mod_loader=known_mod_loader
+            )
+            return
+
+        if isinstance(raw_mods_list_mapping, str):
+            load_from_single_depth_iterable(
+                raw_mods_list.strip("\n").split(","),
+                known_minecraft_version=known_minecraft_version,
+                known_mod_loader=known_mod_loader
+            )
+            return
+
+        if isinstance(raw_mods_list_mapping, Sequence):
+            IS_ARRAY_OF_MAPPINGS: Final[bool] = all(
+                isinstance(inner_object, Mapping)
+                for inner_object
+                in random.sample(
+                    raw_mods_list_mapping,
+                    (
+                        len(raw_mods_list_mapping) // 2
+                        if (len(raw_mods_list_mapping) // 2) > 0
+                        else 1
+                    )
+                )
+            )
+            if IS_ARRAY_OF_MAPPINGS:
+                load_from_iterable_of_mappings(
+                    raw_mods_list_mapping,  # type: ignore[arg-type]
+                    known_minecraft_version=known_minecraft_version,
+                    known_mod_loader=known_mod_loader
+                )
+                return
+
+            IS_ARRAY_OF_ARRAYS: Final[bool] = all(
+                isinstance(inner_object, Sequence)
+                for inner_object
+                in random.sample(
+                    raw_mods_list_mapping,
+                    (
+                        len(raw_mods_list_mapping) // 2
+                        if (len(raw_mods_list_mapping) // 2) > 0
+                        else 1
+                    )
+                )
+            )
+            if IS_ARRAY_OF_ARRAYS:
+                IS_INNER_ARRAY_OF_STRINGS: Final[bool] = all(
+                    all(
+                        isinstance(inner_inner_object, str)
+                        for inner_inner_object
+                        in inner_object
+                    )
+                    for inner_object
+                    in random.sample(
+                        raw_mods_list_mapping,
+                        (
+                            len(raw_mods_list_mapping) // 2
+                            if (len(raw_mods_list_mapping) // 2) > 0
+                            else 1
+                        )
+                    )
+                )
+                if IS_INNER_ARRAY_OF_STRINGS:
+                    try:
+                        raw_mods_list_collection = (
+                            [",".join(inner_object) for inner_object in raw_mods_list_mapping]
+                        )
+                    except TypeError:
+                        raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE) from None
+
+                else:
+                    raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
+
+            else:
+                raw_mods_list_collection = (
+                    [str(inner_object) for inner_object in raw_mods_list_mapping]
+                )
+
+        else:
+            raise ValueError(INVALID_MODS_LIST_MAPPING_MESSAGE)
 
     if len(raw_mods_list_collection) == 0:
-        EMPTY_MODS_LIST_ERROR: Final[str] = "Empty mods list."
-        raise ValueError(EMPTY_MODS_LIST_ERROR)
+        raise ValueError(EMPTY_MODS_LIST_MESSAGE)
 
     if len(raw_mods_list_collection) == 1:
         load_from_single_depth_iterable(
@@ -350,22 +696,29 @@ def load_from_str(raw_mods_list: str, *, known_minecraft_version: str | None = N
             known_minecraft_version=known_minecraft_version,
             known_mod_loader=known_mod_loader
         )
+        return
 
-    else:
-        IS_SINGLE_DEPTH: Final[bool] = all(
-            "," not in raw_identifier.strip(", \t\n")
-            for raw_identifier
-            in random.sample(raw_mods_list_collection, len(raw_mods_list_collection) // 2)
+    IS_SINGLE_DEPTH: Final[bool] = all(
+        "," not in raw_identifier.strip(", \t\n")
+        for raw_identifier
+        in random.sample(
+            raw_mods_list_collection,
+            (
+                len(raw_mods_list_collection) // 2
+                if (len(raw_mods_list_collection) // 2) > 0
+                else 1
+            )
         )
-        if IS_SINGLE_DEPTH:
-            load_from_single_depth_iterable(
-                raw_mods_list_collection,
-                known_minecraft_version=known_minecraft_version,
-                known_mod_loader=known_mod_loader
-            )
-        else:
-            load_from_multi_depth_iterable(
-                raw_mods_list_collection,
-                known_minecraft_version=known_minecraft_version,
-                known_mod_loader=known_mod_loader
-            )
+    )
+    if IS_SINGLE_DEPTH:
+        load_from_single_depth_iterable(
+            raw_mods_list_collection,
+            known_minecraft_version=known_minecraft_version,
+            known_mod_loader=known_mod_loader
+        )
+    else:
+        load_from_multi_depth_iterable(
+            raw_mods_list_collection,
+            known_minecraft_version=known_minecraft_version,
+            known_mod_loader=known_mod_loader
+        )
