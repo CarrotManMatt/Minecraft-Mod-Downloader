@@ -11,9 +11,12 @@ __all__: Sequence[str] = ("run",)
 import logging
 import argparse
 from argparse import ArgumentParser, Namespace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+
 from minecraft_mod_downloader.exceptions import ImproperlyConfiguredError
+from minecraft_mod_downloader.export_mods_list import export_mods_list
 from minecraft_mod_downloader.models import BaseMod, CustomSourceMod, ModLoader, SimpleMod
 
 from minecraft_mod_downloader import config
@@ -107,6 +110,7 @@ def set_up_arg_parser() -> ArgumentParser:
     arg_parser.add_argument(
         "-F",
         "--export",
+        type=Path,
         help=(
             "Re-export the imported mods-list as a new JSON file to the given file-path"
         )
@@ -193,9 +197,27 @@ def run(argv: Sequence[str] | None = None) -> int:
         arg_parser.error(str(e))
         return 2
 
-    # TODO: output re-export file
     logging.info(
         f"Successfully read {BaseMod.objects.count()} mod objects from your mods-list"
     )
+
+    if parsed_args.export:
+        export_mods_list(export_file_path=parsed_args.export)
+
+    mod: BaseMod
+    for mod in BaseMod.objects.all():
+        try:
+            print(repr(mod.simplemod), end=", ")
+        except SimpleMod.DoesNotExist:
+            try:
+                try:
+                    print(repr(mod.detailedmod.customsourcemod), end=", ")
+                except CustomSourceMod.DoesNotExist:
+                    print(repr(mod.detailedmod.apisourcemod), end=", ")
+                print(set(mod.detailedmod.tags.all()), end=", ")
+            except (DetailedMod.DoesNotExist, APISourceMod.DoesNotExist):
+                print(repr(mod), end=", ")
+
+        print(f"{mod.mod_loader}, {mod.minecraft_version}")
 
     return 0
