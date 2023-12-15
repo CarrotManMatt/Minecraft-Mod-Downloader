@@ -24,7 +24,9 @@ deconstructible = deconstruct.deconstructible
 class UniqueIdentifierValidator(RegexValidator):
     """Validator, which ensures a given identifier matches the given regex."""
 
-    UNIQUE_IDENTIFIER_RE: str = r"\A[A-Za-z](?:[A-Za-z0-9 .\-_+]*[A-Za-z0-9])?\Z"
+    UNIQUE_IDENTIFIER_RE: str = (
+        r"\A(?![ .\-_+])(?:(?![ .\-_+]{2,})[A-Za-z0-9 .\-_+])*(?<![ .\-_+])\Z"
+    )
 
     message: str = _("Invalid unique identifier")
     regex: re.Pattern[str] = re.compile(UNIQUE_IDENTIFIER_RE)
@@ -52,7 +54,7 @@ class UnsanitisedMinecraftVersionValidator(RegexValidator):
 
 @deconstructible
 class ShortIDValidator(RegexValidator):
-    SHORT_ID_RE: str = r"\A[A-Za-z0-9]+\Z"
+    SHORT_ID_RE: str = r"\A(?![.\-])(?:(?![.\-]{2,})[A-Za-z0-9.\-])*(?<![.\-])\Z"
 
     message: str = _("Invalid short ID")
     regex: re.Pattern[str] = re.compile(SHORT_ID_RE)
@@ -60,7 +62,7 @@ class ShortIDValidator(RegexValidator):
 
 @deconstructible
 class TagNameValidator(RegexValidator):
-    TAG_NAME_RE: str = r"\A[a-z](?:(?!\-{2})[a-z\-])*[a-z]\Z"
+    TAG_NAME_RE: str = r"\A(?!-)(?:(?!-{2,})[a-z\-])*(?<!-)\Z"
 
     message: str = _("Invalid name")
     regex: re.Pattern[str] = re.compile(TAG_NAME_RE)
