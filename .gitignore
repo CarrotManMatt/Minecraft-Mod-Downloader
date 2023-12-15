@@ -122,8 +122,11 @@ cython_debug/
 local/
 *.sqlite3
 *.db
-[mM]ods.json
-[mM]ods.csv
-[mM]ods.txt
-[mM]ods[-_ ][Ll]ist.*
+*[mM]ods.json
+*[mM]ods.csv
+*[mM]ods.txt
+*[mM]ods.json.*
+*[mM]ods.csv.*
+*[mM]ods.txt.*
+*[mM]ods[-_ ][Ll]ist.*
 *.jar
