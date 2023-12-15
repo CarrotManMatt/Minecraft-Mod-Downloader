@@ -13,9 +13,10 @@ from argparse import ArgumentParser, Namespace
 from typing import TYPE_CHECKING
 
 from minecraft_mod_downloader.exceptions import ImproperlyConfiguredError
-from minecraft_mod_downloader.models import ModLoader
+from minecraft_mod_downloader.models import BaseMod, CustomSourceMod, ModLoader, SimpleMod
 
 from minecraft_mod_downloader import config
+from minecraft_mod_downloader.models import APISourceMod, DetailedMod
 from minecraft_mod_downloader.utils import SuppressStdOutAndStdErr, SuppressTraceback
 from minecraft_mod_downloader import parse_mods_list
 

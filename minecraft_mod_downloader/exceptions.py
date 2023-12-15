@@ -5,7 +5,8 @@ from collections.abc import Sequence
 __all__: Sequence[str] = (
     "BaseError",
     "ConfigSettingRequiredError",
-    "ImproperlyConfiguredError"
+    "ImproperlyConfiguredError",
+    "ModListEntryLoadError"
 )
 
 import abc
@@ -60,7 +61,7 @@ class ConfigSettingRequiredError(ImproperlyConfiguredError):
         )
 
 
-class ModListEntryLoadError(ImproperlyConfiguredError):
+class ModListEntryLoadError(BaseError, Exception):
     """Exception class for when a given mod-list entry could not be correctly loaded."""
 
     DEFAULT_MESSAGE: str = "One of the mod-list entries could not be correctly loaded."

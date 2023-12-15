@@ -6,6 +6,7 @@ import django
 __all__: Sequence[str] = (
     "BaseMod",
     "SimpleMod",
+    "DetailedMod",
     "CustomSourceMod",
     "APISourceMod",
     "ModLoader",
@@ -28,6 +29,7 @@ from minecraft_mod_downloader.models._mem_db_core.models import (
     CustomSourceMod,
     MinecraftVersionValidator,
     UnsanitisedMinecraftVersionValidator,
+    DetailedMod,
     ModTag,
     SimpleMod,
     ModLoader

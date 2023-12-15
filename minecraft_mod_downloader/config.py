@@ -12,7 +12,17 @@ __all__: Sequence[str] = (
     "FALSE_VALUES",
     "settings",
     "run_setup",
-    "IS_ENV_VARIABLES_SETUP"
+    "IS_ENV_VARIABLES_SETUP",
+    "identify_tags_from_path",
+    "minecraft_version_name_is_regex_valid",
+    "minecraft_version_path_is_valid",
+    "minecraft_versions_directory_path_contains_a_valid_version",
+    "get_default_minecraft_installation_directory_path",
+    "get_default_minecraft_mods_installation_directory_path",
+    "get_default_minecraft_versions_directory_path",
+    "get_mod_loader_from_filename",
+    "get_default_mod_loader",
+    "get_latest_installed_minecraft_version"
 )
 
 from django.core.exceptions import ValidationError
@@ -217,6 +227,19 @@ def get_default_minecraft_versions_directory_path() -> Path:
     return default_minecraft_versions_directory_path
 
 
+def get_mod_loader_from_filename(filename: str) -> ModLoader | None:
+    if "fabric" in filename.lower():
+        return ModLoader.FABRIC
+
+    if "forge" in filename.lower():
+        return ModLoader.FORGE
+
+    if "quilt" in filename.lower():
+        return ModLoader.QUILT
+
+    return None
+
+
 def get_default_mod_loader(minecraft_version: str, minecraft_versions_directory_path: Path) -> ModLoader:
     minecraft_version_path: Path
     for minecraft_version_path in minecraft_versions_directory_path.iterdir():
@@ -225,14 +248,11 @@ def get_default_mod_loader(minecraft_version: str, minecraft_versions_directory_
             and minecraft_version_path_is_valid(minecraft_version_path)
         )
         if compatible_mod_loader_found:
-            if "fabric" in minecraft_version_path.name:
-                return ModLoader("FA")
-
-            if "forge" in minecraft_version_path.name:
-                return ModLoader("FO")
-
-            if "quilt" in minecraft_version_path.name:
-                return ModLoader("QU")
+            mod_loader: ModLoader | None = get_mod_loader_from_filename(
+                minecraft_version_path.name
+            )
+            if mod_loader:
+                return mod_loader
 
     return ModLoader("FA")
 
