@@ -8,6 +8,7 @@ from collections.abc import Sequence
 
 __all__: Sequence[str] = ("run",)
 
+import logging
 import argparse
 from argparse import ArgumentParser, Namespace
 from typing import TYPE_CHECKING
@@ -193,5 +194,8 @@ def run(argv: Sequence[str] | None = None) -> int:
         return 2
 
     # TODO: output re-export file
+    logging.info(
+        f"Successfully read {BaseMod.objects.count()} mod objects from your mods-list"
+    )
 
     return 0

@@ -640,33 +640,42 @@ class Settings:
         dotenv.load_dotenv()
 
         self._setup_logging(verbosity=verbosity, force_env_variables=force_env_variables)
+        logging.debug("Successfully setup logging")
 
         self._setup_minecraft_mods_installation_directory_path(
             minecraft_mods_installation_directory_path=minecraft_mods_installation_directory_path,
             force_env_variables=force_env_variables
+        )
+        logging.debug(
+            "Successfully setup Env variable: MINECRAFT_MODS_INSTALLATION_DIRECTORY_PATH"
         )
 
         self._setup_minecraft_versions_directory_path(
             minecraft_versions_directory_path=minecraft_versions_directory_path,
             force_env_variables=force_env_variables
         )
+        logging.debug("Successfully setup Env variable: MINECRAFT_VERSIONS_DIRECTORY_PATH")
 
         self._setup_curseforge_api_key(
             curseforge_api_key=curseforge_api_key,
             force_env_variables=force_env_variables
         )
+        logging.debug("Successfully setup Env variable: CURSEFORGE_API_KEY")
 
         self._setup_filter_minecraft_version(
             filter_minecraft_version=filter_minecraft_version,
             force_env_variables=force_env_variables
         )
+        logging.debug("Successfully setup Env variable: FILTER_MINECRAFT_VERSION")
 
         self._setup_filter_mod_loader(
             filter_mod_loader=filter_mod_loader,
             force_env_variables=force_env_variables
         )
+        logging.debug("Successfully setup Env variable: FILTER_MOD_LOADER")
 
         self._settings["DRY_RUN"] = dry_run
+        logging.debug("Successfully setup Env variable: DRY_RUN")
 
         self._is_env_variables_setup = True
 
