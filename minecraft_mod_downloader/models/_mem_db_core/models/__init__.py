@@ -18,7 +18,7 @@ from typing import Any, Final
 
 import pathvalidate
 from django.core.exceptions import ValidationError
-from django.core.validators import MinLengthValidator
+from django.core.validators import MinLengthValidator, URLValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -229,6 +229,7 @@ class DetailedMod(BaseMod):
     )
 
     class Meta:
+        # noinspection SpellCheckingInspection
         constraints = [  # noqa: RUF012
             models.UniqueConstraint(
                 fields=("version_id", "name"),
@@ -254,7 +255,7 @@ class DetailedMod(BaseMod):
             raise ValidationError(INVALID_FILE_NAME_MESSAGE)
 
     def __str__(self) -> str:
-        return self.name
+        return f"{self.name} ({self.file_name})"
 
     @property
     def file_name(self) -> str:
@@ -270,6 +271,7 @@ class DetailedMod(BaseMod):
 class CustomSourceMod(DetailedMod):
     download_url = models.URLField(
         _("Download URL"),
+        validators=[URLValidator()],
         blank=False,
         null=False
     )
@@ -300,6 +302,7 @@ class APISourceMod(DetailedMod):
 
     class Meta:
         verbose_name = _("API Source Mod")
+        # noinspection SpellCheckingInspection
         constraints = [  # noqa: RUF012
             models.UniqueConstraint(
                 fields=("api_mod_id", "api_source"),

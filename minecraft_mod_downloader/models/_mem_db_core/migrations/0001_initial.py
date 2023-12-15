@@ -73,7 +73,7 @@ class Migration(migrations.Migration):
             name='CustomSourceMod',
             fields=[
                 ('detailedmod_ptr', models.OneToOneField(auto_created=True, on_delete=django.db.models.deletion.CASCADE, parent_link=True, primary_key=True, serialize=False, to='_mem_db_core.detailedmod')),
-                ('download_url', models.URLField(verbose_name='Download URL')),
+                ('download_url', models.URLField(validators=[django.core.validators.URLValidator()], verbose_name='Download URL')),
             ],
             options={
                 'verbose_name': 'Custom Source Mod',
