@@ -12,7 +12,7 @@ __all__: Sequence[str] = (
 import re
 import random
 import os
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterator, Iterable, Mapping
 import json
 from io import TextIOWrapper
 from pathlib import Path
@@ -21,6 +21,7 @@ import logging
 
 from django.core import serializers
 from django.core.exceptions import ValidationError
+from django.core.serializers.base import DeserializedObject
 
 from minecraft_mod_downloader import config
 from minecraft_mod_downloader.config import FALSE_VALUES, TRUE_VALUES, settings
@@ -36,7 +37,7 @@ INVALID_MODS_LIST_MAPPING_MESSAGE: Final[str] = (
 )
 REQUIRED_DETAILED_MOD_KEYS: Iterable[str] = (
     "name",
-    "file_name",
+    "filename",
     "version_id",
     "download_source"
 )
@@ -87,30 +88,30 @@ def get_minecraft_version_from_filename(filename: str) -> str | None:
 
 
 def setup_raw_mods_list(*, mods_list_file: TextIOWrapper | None, mods_list: str | None, force_env_variables: bool = False) -> None:  # noqa: E501
-    file_name_minecraft_version: str | None = None
-    file_name_mod_loader: ModLoader | None = None
+    filename_minecraft_version: str | None = None
+    filename_mod_loader: ModLoader | None = None
     if mods_list is not None or mods_list_file is not None:
         file_path: Path
         for file_path in Path().iterdir():
-            temp_file_name_minecraft_version: str | None = get_minecraft_version_from_filename(
+            temp_filename_minecraft_version: str | None = get_minecraft_version_from_filename(
                 file_path.name
             )
-            file_name_minecraft_version_is_empty: bool = bool(
-                temp_file_name_minecraft_version is not None
-                and file_name_minecraft_version is None
+            filename_minecraft_version_is_empty: bool = bool(
+                temp_filename_minecraft_version is not None
+                and filename_minecraft_version is None
             )
-            if file_name_minecraft_version_is_empty:
-                file_name_minecraft_version = temp_file_name_minecraft_version
+            if filename_minecraft_version_is_empty:
+                filename_minecraft_version = temp_filename_minecraft_version
 
-            temp_file_name_mod_loader: ModLoader | None = config.get_mod_loader_from_filename(
+            temp_filename_mod_loader: ModLoader | None = config.get_mod_loader_from_filename(
                 file_path.name
             )
-            file_name_mod_loader_is_empty: bool = bool(
-                temp_file_name_mod_loader is not None
-                and file_name_mod_loader is None
+            filename_mod_loader_is_empty: bool = bool(
+                temp_filename_mod_loader is not None
+                and filename_mod_loader is None
             )
-            if file_name_mod_loader_is_empty:
-                file_name_mod_loader = temp_file_name_mod_loader
+            if filename_mod_loader_is_empty:
+                filename_mod_loader = temp_filename_mod_loader
 
     if mods_list is None or force_env_variables:
         if mods_list_file is None or force_env_variables:
@@ -130,7 +131,7 @@ def setup_raw_mods_list(*, mods_list_file: TextIOWrapper | None, mods_list: str 
             with mods_list_file_path.open("r") as mods_list_file:
                 mods_list = mods_list_file.read()
 
-            file_name_minecraft_version = get_minecraft_version_from_filename(
+            filename_minecraft_version = get_minecraft_version_from_filename(
                 mods_list_file_path.name
             )
 
@@ -139,8 +140,8 @@ def setup_raw_mods_list(*, mods_list_file: TextIOWrapper | None, mods_list: str 
 
     load_from_str(
         mods_list,
-        known_minecraft_version=file_name_minecraft_version,
-        known_mod_loader=file_name_mod_loader
+        known_minecraft_version=filename_minecraft_version,
+        known_mod_loader=filename_mod_loader
     )
 
 
@@ -274,12 +275,12 @@ def load_from_iterable_of_mappings(raw_mods_list_collection: Iterable[Mapping[st
                     if known_mod_loader
                     else settings["FILTER_MOD_LOADER"]
                 ),
-                _unique_identifier=mod_details["file_name"].strip(),
+                _unique_identifier=mod_details["filename"].strip(),
                 defaults=instance_defaults
             )
         except ValidationError as e:
             raise ModListEntryLoadError(
-                unique_identifier=mod_details["file_name"].strip(),
+                unique_identifier=mod_details["filename"].strip(),
                 reason=e
             ) from None
 
@@ -302,7 +303,7 @@ def load_from_iterable_of_mappings(raw_mods_list_collection: Iterable[Mapping[st
                 except ValidationError as e:
                     raise ModTagLoadError(
                         name=tag,
-                        mod_unique_identifier=mod_details["file_name"].strip(),
+                        mod_unique_identifier=mod_details["filename"].strip(),
                         reason=e
                     ) from None
 
@@ -422,17 +423,17 @@ def _load_single_mod_from_partial_collection(raw_mod_details_collection: list[st
 
     disabled_value_needs_error_showing: bool = False
 
-    file_name_minecraft_version: str | None = get_minecraft_version_from_filename(
+    filename_minecraft_version: str | None = get_minecraft_version_from_filename(
         raw_mod_details_collection[1].strip()
     )
-    if file_name_minecraft_version:
-        known_minecraft_version = file_name_minecraft_version
+    if filename_minecraft_version:
+        known_minecraft_version = filename_minecraft_version
 
-    file_name_mod_loader: str | None = config.get_mod_loader_from_filename(
+    filename_mod_loader: str | None = config.get_mod_loader_from_filename(
         raw_mod_details_collection[1].strip()
     )
-    if file_name_mod_loader:
-        known_mod_loader = file_name_mod_loader
+    if filename_mod_loader:
+        known_mod_loader = filename_mod_loader
 
     ModClass: type[DetailedMod]
     if isinstance(download_source, APISourceMod.APISource):
@@ -652,7 +653,10 @@ def load_from_str(raw_mods_list: str, *, known_minecraft_version: str | None = N
             )
             if IS_ARRAY_OF_MAPPINGS:
                 IS_DATA_DUMP_MAPPING: Final[bool] = all(
-                    all(tag in inner_mapping for tag in ("model", "pk", "fields"))
+                    bool(
+                        set(inner_mapping.keys()).issubset({"model", "fields", "pk"})
+                        and {"model", "fields"}.issubset(set(inner_mapping.keys()))
+                    )
                     for inner_mapping
                     in random.sample(
                         raw_mods_list_mapping,
@@ -664,7 +668,11 @@ def load_from_str(raw_mods_list: str, *, known_minecraft_version: str | None = N
                     )
                 )
                 if IS_DATA_DUMP_MAPPING:
-                    for deserialized_object in serializers.deserialize("json", raw_mods_list):
+                    DESERIALIZED_OBJECTS: Final[Iterator[DeserializedObject]] = serializers.deserialize(
+                        "json",
+                        raw_mods_list
+                    )
+                    for deserialized_object in DESERIALIZED_OBJECTS:
                         deserialized_object.save()
                     return
 

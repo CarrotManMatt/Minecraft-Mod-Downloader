@@ -1,9 +1,6 @@
 from collections.abc import Sequence
 
-__all__: Sequence[str] = [
-    "can_export_as_csv",
-    "export_mods_list"
-]
+__all__: Sequence[str] = ("can_export_as_csv", "export_mods_list")
 
 from pathlib import Path
 import logging
@@ -47,7 +44,11 @@ def export_mods_list_as_json(*, export_file_path: Path) -> None:
         management.call_command(
             "dumpdata",
             "_mem_db_core",
-            output=export_file_path
+            format="json",
+            indent=4,
+            output=export_file_path,
+            natural_foreign=True,
+            natural_primary=True
         )
 
     logging.info(

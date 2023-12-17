@@ -1,5 +1,5 @@
 """Custom exception classes that could be raised."""
-
+import re
 from collections.abc import Sequence
 
 __all__: Sequence[str] = (
@@ -7,12 +7,21 @@ __all__: Sequence[str] = (
     "ConfigSettingRequiredError",
     "ImproperlyConfiguredError",
     "ModListEntryLoadError",
-    "ModTagLoadError"
+    "ModTagLoadError",
+    "ModRequiresManualDownloadError",
+    "NoCompatibleModVersionFoundOnlineError",
+    "InvalidCalculatedFileHash"
 )
 
 import abc
 from collections.abc import Iterable
+from typing import Final, TYPE_CHECKING
+
 from django.core.exceptions import ValidationError
+
+if TYPE_CHECKING:
+    from hashlib import _Hash as HashType
+    from minecraft_mod_downloader.models import APISourceMod, CustomSourceMod
 
 
 class BaseError(BaseException, abc.ABC):
@@ -30,10 +39,17 @@ class BaseError(BaseException, abc.ABC):
         """Generate a developer-focused representation of the exception's attributes."""
         formatted: str = self.message
 
-        attributes: set[str] = set(self.__dict__.keys())
-        attributes.discard("message")
-        if attributes:
-            formatted += f" ({", ".join({f"{attribute=}" for attribute in attributes})})"
+        if set(self.__dict__.keys()) - {"message"}:
+            formatted += f" ({
+                ", ".join(
+                    {
+                        f"{key}={value!r}"
+                        for key, value
+                        in self.__dict__.items()
+                        if key != "message"
+                    }
+                )
+            })"
 
         return formatted
 
@@ -166,3 +182,72 @@ class ModTagLoadError(ModListEntryLoadError):
                 reason += f"tag {field_name} was invalid"
 
         return reason
+
+
+class NoCompatibleModVersionFoundOnlineError(BaseError, RuntimeError):
+    DEFAULT_MESSAGE: str = "No compatible mod version can be found online."
+
+    def __init__(self, message: str | None = None, mod: "APISourceMod | None" = None) -> None:  # noqa: E501
+        """Create a new NoCompatibleModVersionFoundOnlineError with the given `mod`."""
+        self.mod: APISourceMod | None = mod
+
+        super().__init__(
+            message
+            if message is not None
+            else (
+                f"{self.DEFAULT_MESSAGE.strip(".")} for mod: {self.mod}, "
+                f"on {self.mod.get_api_source_display()} API."
+            )
+        )
+
+
+class ModRequiresManualDownloadError(BaseError, RuntimeError):
+    DEFAULT_MESSAGE: str = "Mods from custom sources must be downloaded manually."
+
+    def __init__(self, message: str | None = None, mod: "CustomSourceMod | None" = None) -> None:  # noqa: E501
+        """Create a new ModRequiresManualDownloadError with the given `mod`."""
+        self.mod: CustomSourceMod | None = mod
+
+        super().__init__(
+            message
+            if message is not None
+            else (
+                f"{self.DEFAULT_MESSAGE}. "
+                f"Download the latest version of {self.mod} from {self.mod.download_url}. "
+                f"(Current mod version: {mod.version_id}.)"
+            )
+        )
+
+
+class InvalidCalculatedFileHash(BaseError, ValueError):
+    DEFAULT_MESSAGE: str = (
+        "Hash of downloaded mod file did not match given hash from latest-version lookup."
+    )
+
+    def __init__(self, message: str | None = None, expected_hash: str | Iterable[str] | None = None, calculated_hash: str | None = None) -> None:  # noqa: E501
+        """Create a new ModRequiresManualDownloadError with the given `mod`."""
+        INVALID_EXPECTED_HASH_MESSAGE: Final[str] = (
+            f"Argument {expected_hash=} must be a valid hash-hex-digest"
+        )
+        if isinstance(expected_hash, str):
+            if not re.match(r"\A[0-9A-Fa-f]+\Z", expected_hash):
+                raise ValueError(INVALID_EXPECTED_HASH_MESSAGE)
+        if isinstance(expected_hash, Iterable):
+            inner_expected_hash: str
+            for inner_expected_hash in expected_hash:
+                if not re.match(r"\A[0-9A-Fa-f]+\Z", inner_expected_hash):
+                    raise ValueError(INVALID_EXPECTED_HASH_MESSAGE)
+        self.expected_hash: str | Iterable[str] | None = expected_hash
+
+        if calculated_hash is not None:
+            INVALID_CALCULATED_HASH_MESSAGE: Final[str] = (
+                f"Argument {calculated_hash=} must be a valid hash-hex-digest"
+            )
+            if not re.match(r"\A[0-9A-Fa-f]+\Z", calculated_hash):
+                raise ValueError(INVALID_CALCULATED_HASH_MESSAGE)
+        self.calculated_hash: str | None = calculated_hash
+
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        return repr(self)

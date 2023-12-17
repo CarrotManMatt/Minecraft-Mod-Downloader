@@ -12,6 +12,7 @@ __all__: Sequence[str] = (
     "FALSE_VALUES",
     "settings",
     "run_setup",
+    "set_database_has_changed",
     "IS_ENV_VARIABLES_SETUP",
     "identify_tags_from_path",
     "minecraft_version_name_is_regex_valid",
@@ -393,8 +394,7 @@ class Settings:
 
             raise KeyError(key_error_message) from None
 
-    @staticmethod
-    def _setup_logging(*, verbosity: int | None, force_env_variables: bool = False) -> None:
+    def _setup_logging(self, *, verbosity: int | None, force_env_variables: bool = False) -> None:
         log_level: str = (
             os.getenv("LOG_LEVEL", "" if force_env_variables else "INFO").upper()  # noqa: PLW1508
             if verbosity is None or force_env_variables
@@ -434,6 +434,8 @@ class Settings:
                 level=getattr(logging, log_level),
                 format="%(levelname)s: %(message)s"
             )
+
+        self._settings["VERBOSITY"] = verbosity
 
     def _setup_minecraft_mods_installation_directory_path(self, *, minecraft_mods_installation_directory_path: Path | None, force_env_variables: bool = False) -> None:  # noqa: E501
         extra_invalid_minecraft_mods_installation_directory_path_message: str = ""
@@ -640,7 +642,7 @@ class Settings:
         dotenv.load_dotenv()
 
         self._setup_logging(verbosity=verbosity, force_env_variables=force_env_variables)
-        logging.debug("Successfully setup logging")
+        logging.debug("Successfully setup logging & Env variable: VERBOSITY")
 
         self._setup_minecraft_mods_installation_directory_path(
             minecraft_mods_installation_directory_path=minecraft_mods_installation_directory_path,
@@ -677,7 +679,19 @@ class Settings:
         self._settings["DRY_RUN"] = dry_run
         logging.debug("Successfully setup Env variable: DRY_RUN")
 
+        self._settings["DATABASE_HAS_CHANGED"] = False
+        logging.debug("Successfully setup Env variable: DATABASE_HAS_CHANGED")
+
         self._is_env_variables_setup = True
+
+    def _set_database_has_changed(self, database_has_changed: bool, *, with_logging: bool = True) -> None:
+        self._settings["DATABASE_HAS_CHANGED"] = database_has_changed
+
+        if with_logging:
+            logging.debug(
+                f"Successfully {"re" if not database_has_changed else ""}set Env variable: "
+                "DATABASE_HAS_CHANGED"
+            )
 
 
 settings: Final[Settings] = Settings()
@@ -699,12 +713,20 @@ def run_setup(*, minecraft_mods_installation_directory_path: Path, minecraft_ver
                 verbosity=verbosity
             )
 
-        logging.debug("Begin database setup")
+    logging.debug("Begin database setup")
 
-        with SuppressStdOutAndStdErr(verbosity - 2):
-            management.call_command("migrate")
+    with SuppressTraceback(settings["VERBOSITY"]), SuppressStdOutAndStdErr(settings["VERBOSITY"] - 2):  # noqa: E501
+        management.call_command("migrate")
 
-        logging.debug("Database setup completed")
+    logging.debug("Database setup completed")
+
+
+def set_database_has_changed(database_has_changed: bool, *, with_logging: bool = True) -> None:
+    # noinspection PyProtectedMember
+    settings._set_database_has_changed(  # noqa: SLF001
+        database_has_changed=database_has_changed,
+        with_logging=with_logging
+    )
 
 
 IS_ENV_VARIABLES_SETUP: bool

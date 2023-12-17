@@ -14,7 +14,9 @@ from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-
+from download_mods import download_mods
+from minecraft_mod_downloader.check_for_database_changes import check_for_database_changes
+from minecraft_mod_downloader.config import settings
 from minecraft_mod_downloader.exceptions import ImproperlyConfiguredError
 from minecraft_mod_downloader.export_mods_list import export_mods_list
 from minecraft_mod_downloader.models import BaseMod, CustomSourceMod, ModLoader, SimpleMod
@@ -121,7 +123,11 @@ def set_up_arg_parser() -> ArgumentParser:
         "--dry-run",
         action="store_true",
         help=(
-            "Output the operations but do not execute anything. Implicitly enables `--verbose`"
+            "Output the operations but do not execute anything. "
+            "Implicitly enables `--verbose`. "
+            "(External APIs will not actually be contacted to check for newer mod versions. "
+            "Instead, it will randomly simulate whether or not a newer version exists "
+            "for each mod.)"
         )
     )
     arg_parser.add_argument(
@@ -137,9 +143,13 @@ def set_up_arg_parser() -> ArgumentParser:
     verbosity_args_group: MutuallyExclusiveGroup = arg_parser.add_mutually_exclusive_group()
     verbosity_args_group.add_argument(
         "-q",
+        "-y",
         "--quiet",
         action="store_true",
-        help="Do not output any messages. Mutually exclusive with `--verbose`"
+        help=(
+            "Do not output any messages & suppress all user interaction. "
+            "Mutually exclusive with `--verbose`"
+        )
     )
     verbosity_args_group.add_argument(
         "-v",
@@ -155,7 +165,6 @@ def set_up_arg_parser() -> ArgumentParser:
 
 def run(argv: Sequence[str] | None = None) -> int:
     """Run the Minecraft Mod Downloader tool as a CLI tool with argument parsing."""
-
     arg_parser: ArgumentParser = set_up_arg_parser()
 
     parsed_args: Namespace = arg_parser.parse_args(argv)
@@ -173,8 +182,16 @@ def run(argv: Sequence[str] | None = None) -> int:
     e: ImproperlyConfiguredError
     try:
         config.run_setup(
-            minecraft_mods_installation_directory_path=parsed_args.minecraft_mods_installation_directory_path,
-            minecraft_versions_directory_path=parsed_args.minecraft_versions_directory_path,
+            minecraft_mods_installation_directory_path=(
+                Path(parsed_args.minecraft_mods_installation_directory_path)
+                if parsed_args.minecraft_mods_installation_directory_path is not None
+                else None
+            ),
+            minecraft_versions_directory_path=(
+                Path(parsed_args.minecraft_versions_directory_path)
+                if parsed_args.minecraft_versions_directory_path is not None
+                else None
+            ),
             curseforge_api_key=parsed_args.curseforge_api_key,
             filter_minecraft_version=parsed_args.filter_minecraft_version,
             filter_mod_loader=parsed_args.filter_mod_loader,
@@ -183,7 +200,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             verbosity=verbosity
         )
 
-        with SuppressTraceback(verbosity), SuppressStdOutAndStdErr(verbosity):
+        with SuppressTraceback(settings["VERBOSITY"]), SuppressStdOutAndStdErr(settings["VERBOSITY"]):  # noqa: E501
             parse_mods_list.setup_raw_mods_list(
                 mods_list_file=parsed_args.mods_list_file,
                 mods_list=(
@@ -193,31 +210,22 @@ def run(argv: Sequence[str] | None = None) -> int:
                 ),
                 force_env_variables=parsed_args.force_env_variables,
             )
+
+        config.set_database_has_changed(False)
+
+        logging.info(
+            f"Successfully read {BaseMod.objects.count()} mod objects from your mods-list"
+        )
+
+        download_mods()
+
+        if parsed_args.export:
+            export_mods_list(export_file_path=parsed_args.export)
+
+        check_for_database_changes(export_file_path_was_empty=(not parsed_args.export))
+
+        return 0
+
     except ImproperlyConfiguredError as e:
         arg_parser.error(str(e))
         return 2
-
-    logging.info(
-        f"Successfully read {BaseMod.objects.count()} mod objects from your mods-list"
-    )
-
-    if parsed_args.export:
-        export_mods_list(export_file_path=parsed_args.export)
-
-    mod: BaseMod
-    for mod in BaseMod.objects.all():
-        try:
-            print(repr(mod.simplemod), end=", ")
-        except SimpleMod.DoesNotExist:
-            try:
-                try:
-                    print(repr(mod.detailedmod.customsourcemod), end=", ")
-                except CustomSourceMod.DoesNotExist:
-                    print(repr(mod.detailedmod.apisourcemod), end=", ")
-                print(set(mod.detailedmod.tags.all()), end=", ")
-            except (DetailedMod.DoesNotExist, APISourceMod.DoesNotExist):
-                print(repr(mod), end=", ")
-
-        print(f"{mod.mod_loader}, {mod.minecraft_version}")
-
-    return 0

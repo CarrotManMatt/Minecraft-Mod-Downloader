@@ -22,6 +22,7 @@ from django.core.validators import MinLengthValidator, URLValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from minecraft_mod_downloader.models._mem_db_core.models.managers import ModTagManager
 from minecraft_mod_downloader.models._mem_db_core.models.utils import BaseModel
 from minecraft_mod_downloader.models._mem_db_core.models.validators import (
     MinecraftVersionValidator,
@@ -134,6 +135,18 @@ class BaseMod(BaseModel):
 
         super().clean()
 
+    def get_formatted_mod_loaders(self) -> str:
+        if self.mod_loader == ModLoader.QUILT:
+            return "\"quilt\",\"fabric\""
+
+        if self.mod_loader == ModLoader.FABRIC:
+            return "\"fabric\""
+
+        if self.mod_loader == ModLoader.FORGE:
+            return "\"forge\""
+
+        raise ValueError
+
 
 class SimpleMod(BaseMod):
     @property
@@ -184,11 +197,16 @@ class ModTag(BaseModel):
         unique=True
     )
 
+    objects = ModTagManager()
+
     class Meta:
         verbose_name = _("Mod Tag")
 
     def __str__(self) -> str:
         return self.name
+
+    def natural_key(self) -> tuple[str, ...]:
+        return (self.name,)
 
 
 class DetailedMod(BaseMod):
@@ -248,28 +266,39 @@ class DetailedMod(BaseMod):
         unique_identifier_field.verbose_name = _("File Name")
 
     def clean(self) -> None:
-        FILE_NAME_IS_VALID: Final[bool] = bool(
-            self.file_name.endswith(".jar")
-            and pathvalidate.is_valid_filename(self.file_name)
+        FILENAME_IS_VALID: Final[bool] = bool(
+            self.filename.endswith(".jar")
+            and pathvalidate.is_valid_filename(self.filename)
         )
-        if not FILE_NAME_IS_VALID:
+        if not FILENAME_IS_VALID:
             INVALID_FILE_NAME_MESSAGE: Final[str] = _("Invalid file name")
             raise ValidationError(INVALID_FILE_NAME_MESSAGE)
 
         super().clean()
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.file_name})"
+        return f"{self.name}"
 
     @property
-    def file_name(self) -> str:
+    def filename(self) -> str:
         return self._unique_identifier
 
-    @file_name.setter
-    def file_name(self, file_name: str | Path) -> None:
+    @filename.setter
+    def filename(self, filename: str | Path) -> None:
         self._unique_identifier = (
-            file_name.resolve().name if isinstance(file_name, Path) else file_name
+            filename.resolve().name if isinstance(filename, Path) else filename
         )
+
+    @classmethod
+    def get_proxy_field_names(cls) -> set[str]:
+        """
+        Return the set of extra names of properties that can be saved to the database.
+
+        These are proxy fields because their values are not stored as object attributes,
+        however, they can be used as a reference to a real attribute when saving objects to the
+        database.
+        """
+        return super().get_proxy_field_names() | {"filename"}
 
 
 class CustomSourceMod(DetailedMod):

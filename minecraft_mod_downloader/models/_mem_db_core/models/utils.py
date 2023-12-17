@@ -5,7 +5,7 @@ from collections.abc import Sequence
 __all__: Sequence[str] = ("BaseModel",)
 
 from typing import Final
-
+from asgiref.sync import sync_to_async
 from django.core.exceptions import FieldDoesNotExist
 from django.db.models import Model
 
@@ -78,9 +78,21 @@ class BaseModel(Model):
             setattr(self, field_name, value)
 
         if commit:
-            self.save(using)
+            self.save(using=using)
 
     update.alters_data: bool = True  # type: ignore[attr-defined, misc]
+
+    # noinspection SpellCheckingInspection
+    async def aupdate(self, *, commit: bool = True, using: str | None = None, **kwargs: object) -> None:  # noqa: E501
+        """
+        Asyncronously change an in-memory object's values, then save it to the database.
+
+        This simplifies the two steps into a single operation
+        (based on Django's Queryset.bulk_update method).
+        """
+        await sync_to_async(self.update)(commit=commit, using=using, **kwargs)
+
+    aupdate.alters_data: bool = True  # type: ignore[attr-defined, misc]
 
     @classmethod
     def get_proxy_field_names(cls) -> set[str]:

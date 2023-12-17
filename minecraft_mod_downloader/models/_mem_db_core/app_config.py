@@ -17,3 +17,6 @@ class MemDBCoreConfig(AppConfig):
 
     default_auto_field: str = "django.db.models.BigAutoField"
     name: str = "minecraft_mod_downloader.models._mem_db_core"
+
+    def ready(self):
+        from minecraft_mod_downloader.models._mem_db_core import signals
